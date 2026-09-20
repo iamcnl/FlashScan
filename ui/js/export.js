@@ -39,8 +39,7 @@ const Export = {
   _defaultStem(fmt) {
     const ts       = new Date().toISOString().slice(0, 10);
     const diskName = this._diskName();
-    return `LIST_${diskName}_${ts}`;
-  },
+    return `${ts}_${diskName}_LIST`  },
 
   _sanitizeStem(raw) {
     return raw.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
