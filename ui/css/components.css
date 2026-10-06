@@ -112,6 +112,12 @@
   opacity: .65;
 }
 
+/* Invisible placeholder on the root row so its state pill lines up with the other rows */
+.note-btn.note-spacer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Note editor overlay */
 #note-editor-overlay {
   font-family: var(--font-sans);

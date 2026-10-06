@@ -345,7 +345,9 @@ const Tree = {
 
     const note        = State.folderNotes[item.path] || '';
     const escapedNote = note.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const noteIcon    = note
+    const noteIcon    = depth === 0
+      ? '<span class="note-btn note-spacer" aria-hidden="true"></span>'
+      : note
       ? `<span class="note-btn note-active" data-note-btn="${item.path}" title="${escapedNote}">` +
         `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>`
       : `<span class="note-btn note-empty" data-note-btn="${item.path}" title="Add note">` +
