@@ -8,7 +8,8 @@ Responsible for:
   - scanning (runs scanner.py in a thread)
   - export (calls exporter.py)
   - dialogs (browse_directory)
-  - settings (get/save)
+  - settings (get/save) and per-drive profiles
+  - window reveal once the UI has applied its settings
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ class API:
     def __init__(self, window_ref_holder: list):
         # window_ref_holder is [window] — populated after window creation
         self._win = window_ref_holder
+        self._reveal_lock = threading.Lock()
+        self._revealed = False
 
     @property
     def _window(self):
@@ -51,6 +54,27 @@ class API:
 
     def save_custom_exts(self, exts: list) -> None:
         settings.save({"customExts": exts})
+
+    def get_profile(self, volume_id: str) -> dict | None:
+        return settings.load_profile(volume_id)
+
+    def save_profile(self, volume_id: str, data: dict) -> None:
+        settings.save_profile(volume_id, data)
+
+    # ── Window ────────────────────────────────────────────────────
+
+    def ui_ready(self) -> None:
+        self.reveal()
+
+    def reveal(self) -> None:
+        with self._reveal_lock:
+            if self._revealed:
+                return
+            self._revealed = True
+        win = self._window
+        if win:
+            win.maximize()
+            win.show()
 
     # ── Dialogs ───────────────────────────────────────────────────
 
@@ -208,6 +232,7 @@ class API:
                     path, depth, incl_hidden, incl_system, progress_cb
                 )
                 settings.save({"lastPath": path})
+                result["depth"] = depth
                 payload = json.dumps(result, ensure_ascii=False)
                 if win:
                     win.evaluate_js(f"onScanDone({payload})")

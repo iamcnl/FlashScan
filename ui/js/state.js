@@ -25,6 +25,8 @@ const State = {
     lastFormats: ['MD'],
     inclHidden:  false,
     inclSystem:  false,
+    sortCol:     'name',
+    sortDir:     'asc',
   },
 
   // ── Export cache ──────────────────────────────────────────────
@@ -32,7 +34,10 @@ const State = {
   _exportCacheDirty: true,
   _exportCache: null,   // { count, size, nameOnly, files[] }
 
-  _markDirty() { this._exportCacheDirty = true; },
+  _markDirty() {
+    this._exportCacheDirty = true;
+    Persist.schedule();
+  },
 
   exportStats() {
     if (!this._exportCacheDirty && this._exportCache) return this._exportCache;
@@ -82,8 +87,8 @@ const State = {
       this.folderStates[i.path] = 'full';
     });
     this.searchQuery = '';
-    this.sortCol     = 'name';
-    this.sortDir     = 'asc';
+    this.sortCol     = ['name', 'size', 'date'].includes(this.settings.sortCol) ? this.settings.sortCol : 'name';
+    this.sortDir     = this.settings.sortDir === 'desc' ? 'desc' : 'asc';
     this.activeExts  = null;
     this.advFilter   = null;
     this.folderNotes = {};

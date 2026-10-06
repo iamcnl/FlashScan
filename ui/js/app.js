@@ -69,6 +69,7 @@ function initCheckbox(id, stateKey, onChange) {
     const val = !el.classList.contains('on');
     el.classList.toggle('on', val);
     State.settings[stateKey] = val;
+    window.pywebview?.api?.save_settings({ [stateKey]: val });
     if (onChange) onChange(val);
   };
   const label = el.closest('label');
@@ -82,6 +83,10 @@ function initCheckbox(id, stateKey, onChange) {
   } else {
     el.addEventListener('click', toggle);
   }
+}
+
+function setCheckbox(id, on) {
+  document.getElementById(id)?.classList.toggle('on', !!on);
 }
 
 /* ── Format cell ── */
@@ -109,6 +114,9 @@ function initSortHeaders() {
         State.sortCol = col;
         State.sortDir = 'asc';
       }
+      State.settings.sortCol = State.sortCol;
+      State.settings.sortDir = State.sortDir;
+      window.pywebview?.api?.save_settings({ sortCol: State.sortCol, sortDir: State.sortDir });
       Tree.updateSortHeadings();
       Tree.invalidate();
       Tree.render();
@@ -191,6 +199,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Scan checkboxes
   initCheckbox('cb-hidden', 'inclHidden');
   initCheckbox('cb-system', 'inclSystem');
+  document.getElementById('depth-input')?.addEventListener('change', e => {
+    const depth = parseInt(e.target.value, 10);
+    if (depth >= 1 && depth <= 50) window.pywebview?.api?.save_settings({ lastDepth: depth });
+  });
 
   // Format grid
   initFmtGrid();
@@ -206,6 +218,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     const settings = await window.pywebview.api.get_settings();
     if (settings) {
       State.settings = { ...State.settings, ...settings };
+      Theme.set(settings.theme === 'dark' ? 'dark' : 'light');
+      setCheckbox('cb-hidden', settings.inclHidden);
+      setCheckbox('cb-system', settings.inclSystem);
+      Export.applyOptions(settings);
+      if (settings.lastDepth) document.getElementById('depth-input').value = settings.lastDepth;
       if (settings.lastPath)   document.getElementById('path-input').value  = settings.lastPath;
       if (settings.lastOutput) document.getElementById('out-input').value   = settings.lastOutput;
       if (settings.lastFormats) {
@@ -225,6 +242,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   Nav.go(0);
+
+  try { await window.pywebview?.api?.ui_ready(); } catch (e) {}
 });
 
 /* ── Inline error message (replacement for alert()) ── */
@@ -305,6 +324,7 @@ function onScanProgress(count) {
 async function onScanDone(result) {
   const { tree, file_count, folder_count, skipped, volume_label } = result;
 
+  Persist.begin();
   State.reset(tree);
   State.volumeLabel = volume_label || '';
   await Filters.init();
@@ -313,6 +333,7 @@ async function onScanDone(result) {
   Tree._focusIdx     = -1;
   Tree._lastClickIdx = -1;
   State.treeData.forEach(i => { if (i.type === 'folder' && i.lvl > 0) Tree._collapsed.add(i.path); });
+  await Persist.restore(result);
   Tree.invalidate();
   Tree.render();
   Tree.updateSortHeadings();
@@ -340,6 +361,7 @@ async function onScanDone(result) {
   try {
     window.pywebview.api.save_settings({
       lastPath:   document.getElementById('path-input')?.value || '',
+      lastDepth:  result.depth,
       inclHidden: document.getElementById('cb-hidden')?.classList.contains('on'),
       inclSystem: document.getElementById('cb-system')?.classList.contains('on'),
     });
@@ -394,10 +416,10 @@ const Theme = {
 
   toggle() {
     const isDark = document.documentElement.dataset.theme === 'dark';
-    this._apply(isDark ? 'light' : 'dark');
+    this.set(isDark ? 'light' : 'dark', true);
   },
 
-  _apply(theme) {
+  set(theme, persist = false) {
     if (theme === 'dark') {
       document.documentElement.dataset.theme = 'dark';
       document.getElementById('icon-sun').style.display = 'none';
@@ -407,7 +429,11 @@ const Theme = {
       document.getElementById('icon-sun').style.display = '';
       document.getElementById('icon-moon').style.display = 'none';
     }
-    localStorage.setItem('flashscan-theme', theme);
+    try { localStorage.setItem('flashscan-theme', theme); } catch (e) {}
+    if (persist) {
+      State.settings.theme = theme;
+      window.pywebview?.api?.save_settings({ theme });
+    }
   }
 };
 

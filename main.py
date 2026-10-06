@@ -7,6 +7,7 @@ Launches the pywebview window with the HTML GUI.
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
 
 import webview
@@ -18,6 +19,8 @@ from ui.api import API
 
 UI_DIR  = Path(__file__).parent / "ui"
 UI_HTML = UI_DIR / "index.html"
+
+REVEAL_TIMEOUT_S = 3.0
 
 
 def main():
@@ -39,8 +42,9 @@ def main():
     window_ref.append(window)
 
     def on_started():
-        window.maximize()
-        window.show()
+        reveal_timer = threading.Timer(REVEAL_TIMEOUT_S, api.reveal)
+        reveal_timer.daemon = True
+        reveal_timer.start()
 
     webview.start(on_started, debug=False)
 

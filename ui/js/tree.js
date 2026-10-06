@@ -475,6 +475,7 @@ const Tree = {
     const commit = (val) => {
       if (val.trim()) State.folderNotes[path] = val.trim();
       else            delete State.folderNotes[path];
+      Persist.schedule();
       wrap.remove();
       this.invalidate();
       this.render();
@@ -587,6 +588,7 @@ const Tree = {
           // Expand
           if (this._collapsed.has(path)) {
             this._collapsed.delete(path);
+            Persist.schedule();
             this.invalidate();
             this.render();
           }
@@ -594,6 +596,7 @@ const Tree = {
           // Collapse
           if (!this._collapsed.has(path) && row.item.lvl > 0) {
             this._collapsed.add(path);
+            Persist.schedule();
             this.invalidate();
             this.render();
           } else {
@@ -675,6 +678,7 @@ const Tree = {
   _toggleCollapse(path) {
     if (this._collapsed.has(path)) this._collapsed.delete(path);
     else this._collapsed.add(path);
+    Persist.schedule();
     this.invalidate(); this.render();
   },
 
@@ -831,10 +835,12 @@ const Tree = {
   },
   collapseAll() {
     State.treeData.forEach(i => { if (i.type==='folder' && i.lvl > 0) this._collapsed.add(i.path); });
+    Persist.schedule();
     this.invalidate(); this.render();
   },
   expandAll() {
     this._collapsed.clear();
+    Persist.schedule();
     this.invalidate(); this.render();
   },
 

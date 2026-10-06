@@ -54,18 +54,22 @@ def is_system(path: Path) -> bool:
 
 # ── Volume label ─────────────────────────────────────────────────
 
-def get_volume_label(path: str) -> str:
-    """Returns the volume label of the drive, or an empty string if unavailable."""
+def get_volume_info(path: str) -> dict:
+    """Returns {'label': str, 'serial': int | None} for the drive that holds path."""
+    label, serial = "", None
     try:
         if _HAS_CTYPES and hasattr(ctypes, 'windll'):
             # Windows: GetVolumeInformationW
             root = str(Path(path).anchor)  # e.g. "D:\"
             buf = ctypes.create_unicode_buffer(256)
+            serial_no = ctypes.c_uint32(0)
             ok = ctypes.windll.kernel32.GetVolumeInformationW(
                 root, buf, len(buf),
-                None, None, None, None, 0
+                ctypes.byref(serial_no), None, None, None, 0
             )
-            return buf.value if ok else ""
+            if ok:
+                label = buf.value
+                serial = serial_no.value or None
         else:
             # macOS/Linux: try via diskutil or /proc/mounts
             anchor = str(Path(path).anchor)
@@ -76,12 +80,25 @@ def get_volume_label(path: str) -> str:
                 ).decode(errors="ignore")
                 for line in out.splitlines():
                     if "Volume Name" in line:
-                        return line.split(":", 1)[-1].strip()
+                        label = line.split(":", 1)[-1].strip()
+                        break
             except Exception:
                 pass
-            return ""
     except Exception:
-        return ""
+        pass
+    return {"label": label, "serial": serial}
+
+
+def get_volume_label(path: str) -> str:
+    """Returns the volume label of the drive, or an empty string if unavailable."""
+    return get_volume_info(path)["label"]
+
+
+def make_volume_id(info: dict, root_path: str) -> str:
+    """Stable drive identity: volume serial where available, else the scan path."""
+    if info["serial"]:
+        return f"serial:{info['serial']:08X}"
+    return f"path:{os.path.normcase(os.path.abspath(root_path))}"
 
 
 # ── Main scan ─────────────────────────────────────────────────────
@@ -100,6 +117,9 @@ def scan_path(
         'file_count':   int,
         'folder_count': int,
         'skipped':      int,
+        'volume_label': str,
+        'volume_id':    str,   # serial:XXXXXXXX or path:<normalized scan path>
+        'volume_root':  str,   # drive root; profile keys are relative to it
     }
 
     tree is a flat list in DFS order (folder, then its contents).
@@ -199,10 +219,13 @@ def scan_path(
                 break
             ancestor = ancestor.parent
 
+    volume = get_volume_info(root_path)
     return {
         "tree":         tree,
         "file_count":   file_count,
         "folder_count": folder_count,
         "skipped":      skipped,
-        "volume_label": get_volume_label(root_path),
+        "volume_label": volume["label"],
+        "volume_id":    make_volume_id(volume, root_path),
+        "volume_root":  str(root.anchor),
     }

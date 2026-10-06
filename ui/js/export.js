@@ -9,6 +9,11 @@ const Export = {
   // stem overrides keyed by format: { MD: "my_report", HTML: "report" }
   _nameOverrides: {},
 
+  _optionKeys: {
+    'chk-include-size': 'exportIncludeSize',
+    'chk-include-date': 'exportIncludeDate',
+  },
+
   init() {
     document.getElementById('btn-export')?.addEventListener('click', () => this.doExport());
     document.getElementById('btn-browse-out')?.addEventListener('click', () => this.browseOutput());
@@ -25,15 +30,27 @@ const Export = {
     }
 
     // Custom checkbox toggles
-    ['chk-include-size', 'chk-include-date'].forEach(id => {
+    Object.entries(this._optionKeys).forEach(([id, key]) => {
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener('click', () => {
         const checked = el.dataset.checked !== 'false';
-        el.dataset.checked = String(!checked);
-        el.querySelector('.cb').classList.toggle('on', !checked);
+        this._setOption(el, !checked);
+        window.pywebview?.api?.save_settings({ [key]: !checked });
       });
     });
+  },
+
+  applyOptions(settings) {
+    Object.entries(this._optionKeys).forEach(([id, key]) => {
+      const el = document.getElementById(id);
+      if (el) this._setOption(el, settings[key] !== false);
+    });
+  },
+
+  _setOption(el, on) {
+    el.dataset.checked = String(on);
+    el.querySelector('.cb').classList.toggle('on', on);
   },
 
   _defaultStem(fmt) {
