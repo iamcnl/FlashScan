@@ -84,6 +84,64 @@
   z-index: 1;
 }
 
+/* Note button — shown in row-state area on folder rows */
+.note-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 8px;
+  opacity: .5;
+  transition: opacity var(--transition), color var(--transition), background var(--transition);
+  color: var(--text3);
+}
+.note-btn.note-active {
+  opacity: 1;
+  color: var(--accent);
+}
+.note-btn:hover {
+  opacity: 1 !important;
+  color: var(--accent);
+  background: var(--accent-light);
+}
+.row-folder:hover .note-btn {
+  opacity: .65;
+}
+
+/* Note editor overlay */
+#note-editor-overlay {
+  font-family: var(--font-sans);
+}
+#note-input {
+  width: 240px;
+  background: var(--card2);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--r-sm);
+  padding: 5px 9px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  outline: none;
+}
+.note-editor-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  border: none;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.note-editor-save  { background: var(--accent); color: #fff; }
+.note-editor-save:hover  { background: var(--accent-hover); }
+.note-editor-clear { background: var(--card3); color: var(--text2); border: 1px solid var(--border2); }
+.note-editor-clear:hover { background: var(--card2); color: var(--text); }
+
 /* Checkbox — custom styles */
 .cb {
   width: 15px;

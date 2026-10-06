@@ -105,7 +105,8 @@ def iter_export(tree: list, folder_states: dict, selected_files: set,
 # ── Markdown ──────────────────────────────────────────────────────
 
 def build_md(tree, folder_states, selected_files, meta, active_exts=None, *,
-             include_size=True, include_date=True) -> str:
+             include_size=True, include_date=True, folder_notes=None) -> str:
+    folder_notes = folder_notes or {}
     label = meta.get('volume_label', '')
     title = f"{label} ({meta['disk_name']})" if label else meta['disk_name']
     lines = [
@@ -121,10 +122,12 @@ def build_md(tree, folder_states, selected_files, meta, active_exts=None, *,
         if typ == "folder":
             hdr    = "#" * min(lvl + 2, 6)
             suffix = " *(contents omitted)*" if state == "name" else ""
+            note        = folder_notes.get(fpath, "")
+            note_inline = f" ({note})" if note else ""
             if lvl <= 1:
-                lines.append(f"\n{hdr} {name}{suffix}\n")
+                lines.append(f"\n{hdr} {name}{suffix}{note_inline}\n")
             else:
-                lines.append(f"{indent}- **{name}/{suffix}**")
+                lines.append(f"{indent}- **{name}/{suffix}**{note_inline}")
         else:
             sz = f" · {fmt_size(size)}" if (include_size and size) else ""
             dt = f" · {fmt_date(mtime)}" if (include_date and mtime) else ""
@@ -135,7 +138,8 @@ def build_md(tree, folder_states, selected_files, meta, active_exts=None, *,
 # ── TXT ──────────────────────────────────────────────────────────
 
 def build_txt(tree, folder_states, selected_files, meta, active_exts=None, *,
-              include_size=True, include_date=True) -> str:
+              include_size=True, include_date=True, folder_notes=None) -> str:
+    folder_notes = folder_notes or {}
     label = meta.get('volume_label', '')
     title = f"{label} ({meta['disk_name']})" if label else meta['disk_name']
     lines = [
@@ -151,6 +155,9 @@ def build_txt(tree, folder_states, selected_files, meta, active_exts=None, *,
         if typ == "folder":
             suffix = "  [name only]" if state == "name" else ""
             lines.append(f"\n{indent}[{name}/{suffix}]")
+            note = folder_notes.get(fpath, "")
+            if note:
+                lines.append(f"{indent}  > {note}")
         else:
             sz = f"  {fmt_size(size):<10}" if (include_size and size) else ""
             dt = f"  {fmt_date(mtime)}" if (include_date and mtime) else ""
@@ -161,7 +168,8 @@ def build_txt(tree, folder_states, selected_files, meta, active_exts=None, *,
 # ── JSON ─────────────────────────────────────────────────────────
 
 def build_json(tree, folder_states, selected_files, meta, active_exts=None, *,
-               include_size=True, include_date=True) -> str:
+               include_size=True, include_date=True, folder_notes=None) -> str:
+    folder_notes = folder_notes or {}
     folders: dict = {}
     current: str | None = None
 
@@ -169,13 +177,17 @@ def build_json(tree, folder_states, selected_files, meta, active_exts=None, *,
             tree, folder_states, selected_files, active_exts):
         if typ == "folder":
             current = fpath
-            folders[fpath] = {
+            entry: dict = {
                 "name":  name,
                 "path":  fpath,
                 "level": lvl,
                 "mode":  state,
                 "files": [],
             }
+            note = folder_notes.get(fpath, "")
+            if note:
+                entry["note"] = note
+            folders[fpath] = entry
         elif typ == "file" and current:
             entry: dict = {"name": name, "path": fpath}
             if include_size:
@@ -223,10 +235,22 @@ def _ext_category(ext: str) -> tuple[str, str]:
     return _EXT_CATEGORIES.get(ext.lower(), _EXT_CATEGORIES["__fallback__"])
 
 
+# ── Note icon SVG (same chat bubble as tree view) ─────────────────
+
+_NOTE_ICON_SVG = (
+    '<svg class="fnote-icon" width="11" height="11" viewBox="0 0 24 24" '
+    'fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'
+    '</svg>'
+)
+
+
 # ── HTML ─────────────────────────────────────────────────────────
 
 def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
-               include_size=True, include_date=True) -> str:
+               include_size=True, include_date=True, folder_notes=None) -> str:
+    folder_notes = folder_notes or {}
     css_tokens = _load_export_css()
 
     items = list(iter_export(tree, folder_states, selected_files, active_exts))
@@ -256,12 +280,10 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
 
         # Reorder: within each folder's children, folders before files
         def reorder(items: list) -> list:
-            """Recursively reorders a flat item list so folders come before files
-            at each level, while keeping each folder's subtree intact."""
             if not items:
                 return []
             base_lvl = items[0][0]
-            runs = []   # each run: (item, [descendants])
+            runs = []
             i = 0
             while i < len(items):
                 item = items[i]
@@ -289,8 +311,8 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
 
         def close_until(target_lvl: int) -> None:
             while open_levels and open_levels[-1] >= target_lvl:
-                parts.append('</div>')      # close .fc
-                parts.append('</details>') # close .folder
+                parts.append('</div>')
+                parts.append('</details>')
                 open_levels.pop()
 
         i = 0
@@ -322,12 +344,24 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
                 else:
                     open_attr = " open" if lvl == 0 else ""
                     ename = _esc(name)
+                    note = folder_notes.get(fpath, "")
+                    # Note icon comes first; text is hidden until hover
+                    if note:
+                        note_meta = (
+                            f'<span class="fnote-inline" title="{_esc(note)}">'
+                            f'{_NOTE_ICON_SVG}'
+                            f'<span class="fnote-text">{_esc(note)}</span>'
+                            f'</span>'
+                        )
+                        fmeta_with_note = f'{note_meta}{" · " + fmeta_html if fmeta_html else ""}'
+                    else:
+                        fmeta_with_note = fmeta_html
                     parts.append(
                         f'<details class="folder"{open_attr}>'
                         f'<summary class="fh">'
                         f'<span class="farr"></span>'
                         f'<span class="fname" title="{ename}/">{ename}/</span>'
-                        f'<span class="fmeta">{fmeta_html}</span>'
+                        f'<span class="fmeta">{fmeta_with_note}</span>'
                         f'</summary>'
                         f'<div class="fc">'
                     )
@@ -355,7 +389,7 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
 
     tree_html = render_tree(items)
 
-    # Legend — only categories that actually appear, in fixed order
+    # Legend
     ORDER = ["Images", "Video", "Audio", "Documents", "Archives", "Code & Data", "Other"]
     legend_items = [
         f'<span class="leg-item"><span class="dot" style="background:{used_cats[k]}"></span>{k}</span>'
@@ -376,7 +410,6 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
     display_name = f"{label}" if label else meta['disk_name']
     display_sub  = meta['disk_name'] if label else ""
 
-    # Escape everything going directly into HTML — file_count/folder_count are int (safe)
     e_display_name = _esc(display_name)
     e_display_sub  = _esc(display_sub)
     e_path         = _esc(meta['path'])
@@ -450,7 +483,6 @@ def _load_export_css() -> str:
         return ""
 
 
-# CSS specific to HTML export — uses tokens from export.css + custom dark override
 _EXPORT_CSS = """
 /* ── Export-specific tokens (light) ── */
 :root {
@@ -490,13 +522,13 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--ex-b
 .disk-date { font-size: 11px; color: var(--ex-subtle); }
 .watermark { font-size: 10px; color: var(--ex-subtle); letter-spacing: .06em; }
 
-/* ── Meta row (replaces stat cards) ── */
+/* ── Meta row ── */
 .meta-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 24px; flex-wrap: wrap; }
 .meta-stat { font-size: 13px; color: var(--ex-muted); }
 .meta-n { font-size: 15px; font-weight: 600; color: var(--ex-text2); letter-spacing: -.01em; }
 .meta-sep { color: var(--ex-subtle); font-size: 12px; }
 
-/* ── Toolbar (text-links, no button chrome) ── */
+/* ── Toolbar ── */
 .tree-toolbar { display: flex; gap: 14px; margin-bottom: 12px; }
 .tb-btn { font-size: 11.5px; background: none; border: none; padding: 0;
           cursor: pointer; font-family: inherit; color: var(--ex-muted);
@@ -526,7 +558,7 @@ details:not([open]) > .fh > .farr { transform: rotate(0deg); }
 .fmeta { font-size: 11px; color: var(--ex-subtle); flex-shrink: 0; white-space: nowrap; min-width: 120px; text-align: right; }
 .fc { margin-left: 10px; padding-left: 14px; border-left: 1px solid var(--ex-faint); }
 
-/* Files — same vertical rhythm as folders, hover only */
+/* Files */
 .fi { display: flex; align-items: center; padding: 5px 4px; gap: 0; border-radius: 3px; }
 .fi-root { padding-left: 22px; }
 .fi:hover { background: var(--ex-hover); }
@@ -535,6 +567,14 @@ details:not([open]) > .fh > .farr { transform: rotate(0deg); }
       flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fsz { font-size: 11px; color: var(--ex-subtle); margin-left: 12px; flex-shrink: 0; white-space: nowrap; min-width: 72px; text-align: right; }
 .fdt { font-size: 11px; color: var(--ex-muted); margin-left: 8px; flex-shrink: 0; white-space: nowrap; min-width: 80px; text-align: right; }
+
+/* ── Folder note — icon always visible, text on hover ── */
+.fnote-inline { display: inline-flex; align-items: center; gap: 3px; color: var(--ex-text2); cursor: default; }
+.fnote-icon { flex-shrink: 0; vertical-align: middle; opacity: .55; transition: opacity .15s; }
+.fnote-inline:hover .fnote-icon { opacity: 1; }
+.fnote-text { font-size: 11px; color: var(--ex-text2); max-width: 0; overflow: hidden;
+              white-space: nowrap; opacity: 0; transition: max-width .2s ease, opacity .15s ease; }
+.fnote-inline:hover .fnote-text { max-width: 300px; opacity: 1; }
 
 /* ── Legend ── */
 .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 22px;

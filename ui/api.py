@@ -227,6 +227,7 @@ class API:
         formats        = params.get("formats", [])
         output_dir     = params.get("output_dir", "")
         folder_states  = params.get("folder_states", {})
+        folder_notes   = params.get("folder_notes", {})
         selected_files = set(params.get("selected_files", []))
         # active_exts: null = all, list = allowed extensions
         raw_exts   = params.get("active_exts", None)
@@ -269,7 +270,8 @@ class API:
             out_file = out_path / fname
             try:
                 content = builder(tree, folder_states, selected_files, meta, active_exts,
-                                 include_size=include_size, include_date=include_date)
+                                 include_size=include_size, include_date=include_date,
+                                 folder_notes=folder_notes)
                 out_file.write_text(content, encoding="utf-8")
                 saved.append(str(out_file))
             except Exception as e:

@@ -208,6 +208,7 @@ const Export = {
         volume_label:   State.volumeLabel || '',
         tree:           State.treeData,
         folder_states:  State.folderStates,
+        folder_notes:   State.folderNotes,
         selected_files: [...State.selectedFiles],
         active_exts:    State.activeExts ? [...State.activeExts] : null,
         include_size:   adv.include_size,

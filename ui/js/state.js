@@ -11,6 +11,7 @@ const State = {
   treeData:      [],
   selectedFiles: new Set(),
   folderStates:  {},
+  folderNotes:   {},   // { path: "note text" } — secondary locations (YouTube, Drive, etc.)
 
   activeExts:  null,   // null = all; Set<string> = extension filter
   searchQuery: '',
@@ -85,6 +86,7 @@ const State = {
     this.sortDir     = 'asc';
     this.activeExts  = null;
     this.advFilter   = null;
+    this.folderNotes = {};
     this._markDirty();
   },
 };

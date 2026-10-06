@@ -343,6 +343,14 @@ const Tree = {
     const sz        = item.size ? fmtSize(item.size) : '';
     const dt        = item.mtime ? fmtDate(item.mtime) : '';
 
+    const note        = State.folderNotes[item.path] || '';
+    const escapedNote = note.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const noteIcon    = note
+      ? `<span class="note-btn note-active" data-note-btn="${item.path}" title="${escapedNote}">` +
+        `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>`
+      : `<span class="note-btn note-empty" data-note-btn="${item.path}" title="Add note">` +
+        `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>`;
+
     return `<div class="row row-folder${dimmed}${focusCls}" data-path="${item.path}" data-type="folder"
       style="position:absolute;top:${top}px;height:${h}px;left:0;right:0;
              padding-left:${indent}px;box-sizing:border-box;
@@ -350,7 +358,7 @@ const Tree = {
       <span class="row-arrow" data-arrow-toggle="${item.path}">${collapsed ? '▶' : '▼'}</span>
       ${icon}
       <span class="${nameCls}">${item.name}</span>
-      <div class="row-state">${pillHtml(state)}</div>
+      <div class="row-state">${pillHtml(state)}${noteIcon}</div>
       <span class="row-size">${sz}</span>
       <span class="row-date">${dt}</span>
     </div>`;
@@ -391,6 +399,14 @@ const Tree = {
       return;
     }
 
+    // Note button click — open inline note editor
+    const noteBtn = e.target.closest('[data-note-btn]');
+    if (noteBtn) {
+      e.stopPropagation();
+      this._openNoteEditor(noteBtn.dataset.noteBtn, noteBtn);
+      return;
+    }
+
     // Folder row click — toggle collapse, update focus
     const folderRow = e.target.closest('[data-type="folder"]');
     if (folderRow) {
@@ -415,6 +431,70 @@ const Tree = {
         this._toggleFile(fileRow.dataset.path, fileRow);
       }
     }
+  },
+
+  /* ── Note editor ───────────────────────────────────────── */
+  _openNoteEditor(path, anchorEl) {
+    // Remove any existing editor
+    document.getElementById('note-editor-overlay')?.remove();
+
+    const current = State.folderNotes[path] || '';
+    const rect    = anchorEl.getBoundingClientRect();
+
+    const wrap = document.createElement('div');
+    wrap.id = 'note-editor-overlay';
+    wrap.innerHTML =
+      `<input id="note-input" type="text" maxlength="300"
+              placeholder="Add note"
+              value="${current.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}">` +
+      `<button class="note-editor-btn note-editor-save" id="note-save">Save</button>` +
+      `<button class="note-editor-btn note-editor-clear" id="note-clear">Clear</button>`;
+
+    // Position below the anchor; flip up if too close to bottom
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const editorH = 44;
+    const top = spaceBelow > editorH + 8
+      ? rect.bottom + 4
+      : rect.top - editorH - 4;
+
+    wrap.style.cssText =
+      `position:fixed;top:${top}px;left:${Math.max(0, rect.right - 360)}px;` +
+      `z-index:9999;display:flex;align-items:center;gap:6px;` +
+      `background:var(--card);border:1.5px solid var(--border2);` +
+      `border-radius:var(--r-sm);padding:6px 8px;` +
+      `box-shadow:0 4px 20px rgba(0,0,0,.18);`;
+
+    document.body.appendChild(wrap);
+
+    const inp = document.getElementById('note-input');
+    inp.focus();
+    inp.select();
+
+    const commit = (val) => {
+      if (val.trim()) State.folderNotes[path] = val.trim();
+      else            delete State.folderNotes[path];
+      wrap.remove();
+      this.invalidate();
+      this.render();
+    };
+
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter')  { ev.preventDefault(); commit(inp.value); }
+      if (ev.key === 'Escape') { wrap.remove(); }
+    });
+    document.getElementById('note-save').addEventListener('click',  () => commit(inp.value));
+    document.getElementById('note-clear').addEventListener('click', () => commit(''));
+
+    // Close on click outside, deferred so this click doesn't immediately close it
+    setTimeout(() => {
+      const handler = (ev) => {
+        if (!wrap.contains(ev.target)) {
+          wrap.remove();
+          document.removeEventListener('click', handler);
+        }
+      };
+      document.addEventListener('click', handler);
+    }, 0);
   },
 
   /* ── Range select (Shift+click) ────────────────────────── */
