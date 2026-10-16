@@ -342,6 +342,21 @@ function initKeyboard() {
   });
 }
 
+/* ── Initial focus ──
+   The native webview focuses the first tabbable element when the window is shown,
+   which highlights the theme toggle. Ignore focus until the user actually interacts. */
+(function suppressInitialFocus() {
+  const onFocusIn = e => {
+    if (!e.target.closest('.modal')) e.target.blur();
+  };
+  const stop = () => {
+    document.removeEventListener('focusin', onFocusIn, true);
+    ['keydown', 'mousedown', 'touchstart'].forEach(t => window.removeEventListener(t, stop, true));
+  };
+  document.addEventListener('focusin', onFocusIn, true);
+  ['keydown', 'mousedown', 'touchstart'].forEach(t => window.addEventListener(t, stop, true));
+})();
+
 /* ── Main init ── */
 window.addEventListener('DOMContentLoaded', async () => {
 
