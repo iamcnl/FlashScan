@@ -80,18 +80,22 @@ const State = {
   },
 
   reset(treeData) {
-    this.treeData      = treeData;
-    this.selectedFiles = new Set(treeData.filter(i => i.type === 'file').map(i => i.path));
-    this.folderStates  = {};
-    treeData.filter(i => i.type === 'folder').forEach(i => {
-      this.folderStates[i.path] = 'full';
-    });
+    this.treeData = treeData;
+    this.resetProfileState();
     this.searchQuery = '';
     this.sortCol     = ['name', 'size', 'date'].includes(this.settings.sortCol) ? this.settings.sortCol : 'name';
     this.sortDir     = this.settings.sortDir === 'desc' ? 'desc' : 'asc';
     this.activeExts  = null;
     this.advFilter   = null;
-    this.folderNotes = {};
     this._markDirty();
+  },
+
+  resetProfileState() {
+    this.selectedFiles = new Set(this.treeData.filter(i => i.type === 'file').map(i => i.path));
+    this.folderStates  = {};
+    this.treeData.filter(i => i.type === 'folder').forEach(i => {
+      this.folderStates[i.path] = 'full';
+    });
+    this.folderNotes = {};
   },
 };

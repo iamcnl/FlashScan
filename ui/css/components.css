@@ -1027,3 +1027,84 @@
   user-select: none;
   white-space: nowrap;
 }
+
+/* Drive profile note (status bar). Stats and buttons keep their size; the note shows in full or not at all. */
+.statusbar .stat,
+.statusbar .stat-sep,
+.statusbar .prog-inline,
+.statusbar .btn { flex-shrink: 0; white-space: nowrap; }
+/* The name-only stat is long: ellipsize it rather than push the buttons out of the bar. */
+.statusbar #stat-name-only { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.profile-note {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  margin-left: var(--sp-1);
+  flex-shrink: 20;   /* gives way before any stat does */
+}
+.profile-note.is-clipped { display: none !important; }
+.profile-note-divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 14px;
+  background: var(--border2);
+}
+.profile-note-icon { flex-shrink: 0; color: var(--accent-text); }
+.profile-note-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text2);
+}
+.profile-note-action {
+  flex-shrink: 0;
+  padding: 0;
+  font: 12px var(--font-sans);
+  color: var(--accent-text);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.profile-note-action:hover         { color: var(--text); }
+.profile-note-action:empty         { display: none; }
+.profile-note-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+
+.btn-ghost:disabled       { opacity: .4; cursor: default; }
+.btn-ghost:disabled:hover { background: none; color: var(--text2); }
+
+/* Modal dialog */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .35);
+}
+.modal {
+  width: min(420px, calc(100vw - 32px));
+  padding: var(--sp-5);
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-card);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .28);
+  font-family: var(--font-sans);
+}
+.modal-title   { margin: 0 0 var(--sp-2); font-size: 14px; font-weight: 600; }
+.modal-text    { margin: 0 0 var(--sp-2); font-size: 12px; color: var(--text2); line-height: 1.5; }
+.modal-list    { margin: 0 0 var(--sp-3); padding-left: 18px; font-size: 12px; line-height: 1.7; }
+.modal-note    { margin: 0 0 var(--sp-4); font-size: 12px; color: var(--text2); line-height: 1.6; white-space: pre-line; }
+.modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+.modal .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.btn-danger        { background: var(--danger); color: #fff; }
+.btn-danger:hover  { background: var(--danger-hover); }

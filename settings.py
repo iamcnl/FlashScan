@@ -114,6 +114,17 @@ def save_profile(volume_id: str, data: dict) -> None:
         log.warning("Cannot save profile %s: %s", path, e)
 
 
+def delete_profile(volume_id: str) -> None:
+    if not volume_id:
+        return
+    path = _profile_path(volume_id)
+    try:
+        with _lock:
+            path.unlink(missing_ok=True)
+    except Exception as e:
+        log.warning("Cannot delete profile %s: %s", path, e)
+
+
 def _evict_old_profiles() -> None:
     profiles = sorted(
         PROFILES_DIR.glob("*.json"),

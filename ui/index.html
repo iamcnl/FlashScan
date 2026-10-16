@@ -164,6 +164,10 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>
             expand all
           </button>
+          <button class="btn-ghost" id="btn-reset-profile" disabled title="Forget saved notes, selection and folder states for this drive">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            reset saved state
+          </button>
         </div>
       </div>
 
@@ -288,6 +292,12 @@
           <span class="stat" id="stat-size">0 B</span>
           <span class="stat-sep" id="stat-name-sep" style="display:none;">·</span>
           <span class="stat" id="stat-name-only" style="display:none;color:var(--text3);"></span>
+          <span class="profile-note" id="profile-note" role="status" aria-live="polite" style="display:none;">
+            <span class="profile-note-divider"></span>
+            <svg class="profile-note-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+            <span class="profile-note-text" id="profile-note-text"></span>
+            <button class="profile-note-action" id="profile-note-action" type="button"></button>
+          </span>
           <div class="spacer"></div>
           <div class="prog-inline">
             <div class="bar"><div class="fill" id="stat-progress" style="width:0%"></div></div>

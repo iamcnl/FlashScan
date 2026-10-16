@@ -61,6 +61,9 @@ class API:
     def save_profile(self, volume_id: str, data: dict) -> None:
         settings.save_profile(volume_id, data)
 
+    def delete_profile(self, volume_id: str) -> None:
+        settings.delete_profile(volume_id)
+
     # ── Window ────────────────────────────────────────────────────
 
     def ui_ready(self) -> None:

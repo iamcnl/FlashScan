@@ -19,6 +19,9 @@ const Persist = {
   _orphans: null,   // stored entries the current scan did not cover
   _ready:   false,  // false while a scan is being loaded, so reset() cannot overwrite the profile
   _timer:   null,
+  _depth:   NaN,    // depth of the current scan, needed to re-apply a snapshot on undo
+
+  get active() { return this._ready; },
 
   relKey(path) {
     const root = this._volume?.root || '';
@@ -36,14 +39,65 @@ const Persist = {
     this._volume  = volume_id
       ? { id: volume_id, root: volume_root || '', label: volume_label || '' }
       : null;
-    this._orphans = { notes: {}, folders: {}, deselected: [], expanded: [] };
+    this._orphans = this._emptyOrphans();
+    this._depth   = depth;
 
+    let summary = null;
     if (this._volume) {
       const profile = await this._fetch(volume_id);
-      if (profile) this._apply(profile, depth);
+      if (profile) summary = this._apply(profile, depth);
     }
     State._markDirty();
     this._ready = !!this._volume;
+    return summary && (summary.notes || summary.folders || summary.files) ? summary : null;
+  },
+
+  // What a reset would delete, or null if no drive is loaded.
+  summary() {
+    if (!this._ready) return null;
+    const { treeData, folderStates, selectedFiles, folderNotes } = State;
+    let folders = 0, files = 0, expanded = 0;
+    for (const item of treeData) {
+      if (item.type === 'folder') {
+        const state = folderStates[item.path];
+        if (state === 'name' || state === 'skip') folders++;
+        if (item.lvl > 0 && !Tree._collapsed.has(item.path)) expanded++;
+      } else if (!selectedFiles.has(item.path)) {
+        files++;
+      }
+    }
+    const o = this._orphans;
+    return {
+      notes:  Object.keys(folderNotes).length,
+      folders, files, expanded,
+      unseen: Object.keys(o.notes).length + Object.keys(o.folders).length + o.deselected.length + o.expanded.length,
+      label:  this._volume.label,
+    };
+  },
+
+  // Returns a snapshot for undo(), or null if no drive is loaded.
+  reset() {
+    if (!this._ready) return null;
+    clearTimeout(this._timer);
+    this._timer = null;
+    const snapshot = this._capture();
+    this._orphans = this._emptyOrphans();
+    State.resetProfileState();
+    this._collapseAll();
+    State._markDirty();
+    this.flush();
+    return snapshot;
+  },
+
+  undo(snapshot) {
+    if (!this._ready || !snapshot) return null;
+    this._orphans = this._emptyOrphans();
+    State.resetProfileState();
+    this._collapseAll();
+    const summary = this._apply(snapshot, this._depth);
+    State._markDirty();
+    this.flush();
+    return summary;
   },
 
   schedule() {
@@ -57,7 +111,26 @@ const Persist = {
     this._timer = null;
     const api = window.pywebview?.api;
     if (!this._ready || !api?.save_profile) return;
-    api.save_profile(this._volume.id, this._capture()).catch(() => {});
+    const data = this._capture();
+    const call = this._isEmpty(data)
+      ? api.delete_profile(this._volume.id)
+      : api.save_profile(this._volume.id, data);
+    call.catch(() => {});
+  },
+
+  _isEmpty(data) {
+    return !Object.keys(data.notes).length && !Object.keys(data.folders).length
+        && !data.deselected.length && !data.expanded.length;
+  },
+
+  _emptyOrphans() {
+    return { notes: {}, folders: {}, deselected: [], expanded: [] };
+  },
+
+  _collapseAll() {
+    State.treeData.forEach(i => {
+      if (i.type === 'folder' && i.lvl > 0) Tree._collapsed.add(i.path);
+    });
   },
 
   async _fetch(volumeId) {
@@ -141,20 +214,24 @@ const Persist = {
       }
     }
 
+    const counts  = { notes: Object.keys(State.folderNotes).length, folders: 0, files: 0 };
     const allFull = new Uint8Array(tree.length).fill(1);
     for (let i = tree.length - 1; i >= 0; i--) {
       const item = tree[i];
       let full;
       if (item.type === 'folder') {
-        if (!fixed[i]) State.folderStates[item.path] = allFull[i] ? 'full' : 'partial';
+        if (fixed[i]) counts.folders++;
+        else State.folderStates[item.path] = allFull[i] ? 'full' : 'partial';
         full = State.folderStates[item.path] === 'full';
       } else {
         full = State.selectedFiles.has(item.path);
+        if (!full) counts.files++;
       }
       if (!full && parentIdx[i] >= 0) allFull[parentIdx[i]] = 0;
     }
 
     this._keepOrphans(notes, folders, unmatched, tree[0] ? this.relKey(tree[0].path) : '', depth);
+    return counts;
   },
 
   // Notes are always kept. Everything else is kept only if this scan could not have seen it;

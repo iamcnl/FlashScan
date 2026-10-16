@@ -104,6 +104,201 @@ function initFmtGrid() {
   });
 }
 
+/* ── Confirm dialog ── */
+const ConfirmDialog = {
+  _open: false,
+
+  show({ title, intro = '', items = [], note = '', confirmLabel = 'OK', cancelLabel = 'Cancel' }) {
+    if (this._open) return Promise.resolve(false);
+    this._open = true;
+
+    const el = (tag, className, text) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+
+    const backdrop = el('div', 'modal-backdrop');
+    const dialog   = el('div', 'modal');
+    dialog.setAttribute('role', 'alertdialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'modal-title');
+    dialog.setAttribute('aria-describedby', 'modal-desc');
+
+    const heading = el('h2', 'modal-title', title);
+    heading.id = 'modal-title';
+    const desc = el('p', 'modal-text', intro);
+    desc.id = 'modal-desc';
+    const list = el('ul', 'modal-list');
+    items.forEach(text => list.append(el('li', '', text)));
+    const noteEl = el('p', 'modal-note', note);
+
+    const cancel  = el('button', 'btn btn-secondary', cancelLabel);
+    const confirm = el('button', 'btn btn-danger', confirmLabel);
+    cancel.type = confirm.type = 'button';
+    const actions = el('div', 'modal-actions');
+    actions.append(cancel, confirm);
+
+    dialog.append(heading, desc, list, noteEl, actions);
+    backdrop.append(dialog);
+
+    const previousFocus = document.activeElement;
+    document.body.append(backdrop);
+    cancel.focus();
+
+    return new Promise(resolve => {
+      const close = result => {
+        window.removeEventListener('keydown', onKey, true);
+        backdrop.remove();
+        this._open = false;
+        previousFocus?.focus?.();
+        resolve(result);
+      };
+      // Capture phase on window: the tree's shortcuts (Space, Ctrl+A, ...) must not fire behind the dialog.
+      const onKey = e => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          close(false);
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          (document.activeElement === cancel ? confirm : cancel).focus();
+        }
+      };
+      window.addEventListener('keydown', onKey, true);
+      cancel.addEventListener('click', () => close(false));
+      confirm.addEventListener('click', () => close(true));
+      backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(false); });
+    });
+  },
+};
+
+/* ── Drive profile note (status bar) ── */
+const ProfileNote = {
+  UNDO_MS: 10000,
+
+  _mode:     null,
+  _snapshot: null,
+  _timer:    null,
+
+  init() {
+    document.getElementById('profile-note-action')?.addEventListener('click', () => {
+      if (this._mode === 'reset') this.undo();
+      else this.reset();
+    });
+    document.getElementById('btn-reset-profile')?.addEventListener('click', () => this.reset());
+
+    // The room left for the note changes with the window and with every stats update.
+    const bar = document.querySelector('.statusbar');
+    if (bar && typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => this._fit());
+      [bar, bar.querySelector('.spacer'), document.getElementById('profile-note-text')]
+        .forEach(el => el && observer.observe(el));
+    }
+  },
+
+  afterScan(summary) {
+    this.hide();
+    const btn = document.getElementById('btn-reset-profile');
+    if (btn) btn.disabled = !Persist.active;
+    if (summary) {
+      const title = `restored from last session: ${this._describe(summary)}`;
+      this._show('restored', 'restored from last session', 'reset\u2026', 0, title);
+    }
+  },
+
+  async reset() {
+    const info = Persist.summary();
+    if (!info) return;
+    if (!info.notes && !info.folders && !info.files && !info.expanded && !info.unseen) {
+      this._show('info', 'nothing saved yet', '', 4000, 'nothing saved for this drive yet');
+      return;
+    }
+    if (!(await ConfirmDialog.show(this._resetPrompt(info)))) return;
+
+    const snapshot = Persist.reset();
+    if (!snapshot) return;
+    this._refreshTree();
+    this._show('reset', 'saved state reset', 'undo', this.UNDO_MS, 'saved state reset for this drive');
+    this._snapshot = snapshot;
+  },
+
+  undo() {
+    const summary = Persist.undo(this._snapshot);
+    this._refreshTree();
+    const hasState = summary && (summary.notes || summary.folders || summary.files);
+    if (hasState) {
+      const title = `saved state restored: ${this._describe(summary)}`;
+      this._show('restored', 'saved state restored', 'reset\u2026', 0, title);
+    }
+    else this.hide();
+  },
+
+  hide() {
+    clearTimeout(this._timer);
+    this._mode = null;
+    this._snapshot = null;
+    const note = document.getElementById('profile-note');
+    if (note) note.style.display = 'none';
+  },
+
+  _refreshTree() {
+    Tree.invalidate();
+    Tree.render();
+  },
+
+  _show(mode, text, action, autoHideMs = 0, tooltip = text) {
+    clearTimeout(this._timer);
+    this._mode = mode;
+    const note = document.getElementById('profile-note');
+    document.getElementById('profile-note-text').textContent = text;
+    document.getElementById('profile-note-action').textContent = action;
+    note.title = tooltip;
+    note.style.display = 'flex';
+    this._fit();
+    if (autoHideMs) this._timer = setTimeout(() => this.hide(), autoHideMs);
+  },
+
+  // Never show a clipped sliver: if the text does not fit in full, hide the whole note.
+  _fit() {
+    if (!this._mode) return;
+    const note  = document.getElementById('profile-note');
+    const label = document.getElementById('profile-note-text');
+    note.classList.remove('is-clipped');
+    if (label.scrollWidth > label.clientWidth + 1) note.classList.add('is-clipped');
+  },
+
+  _count(n, one, many) {
+    return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+  },
+
+  _describe({ notes, folders, files }) {
+    return [
+      notes   && this._count(notes,   'note',          'notes'),
+      folders && this._count(folders, 'folder set',    'folders set'),
+      files   && this._count(files,   'file excluded', 'files excluded'),
+    ].filter(Boolean).join(' · ');
+  },
+
+  _resetPrompt(info) {
+    const c = this._count.bind(this);
+    return {
+      title: 'Reset saved state for this drive?',
+      intro: `This permanently deletes what FlashScan remembers about ${info.label ? `\u201C${info.label}\u201D` : 'this drive'}:`,
+      items: [
+        info.notes    && c(info.notes,    'folder note',                                'folder notes'),
+        info.folders  && c(info.folders,  'folder set to names only or skipped',        'folders set to names only or skipped'),
+        info.files    && c(info.files,    'excluded file',                              'excluded files'),
+        info.expanded && c(info.expanded, 'expanded folder',                            'expanded folders'),
+        info.unseen   && c(info.unseen,   'saved entry for folders outside this scan',  'saved entries for folders outside this scan'),
+      ].filter(Boolean),
+      note: 'All files will be selected for export again.\nNothing on the drive, in your exports, or in your settings is changed.\nYou can undo for 10 seconds.',
+      confirmLabel: 'Reset',
+    };
+  },
+};
+
 /* ── Sort headers ── */
 function initSortHeaders() {
   ['name', 'size', 'date'].forEach(col => {
@@ -162,6 +357,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   await Filters.init();
   AdvFilter.init();
   Export.init();
+  ProfileNote.init();
 
   // Navigation — steps are clickable
   document.querySelectorAll('.step[data-step]').forEach(el => {
@@ -333,10 +529,11 @@ async function onScanDone(result) {
   Tree._focusIdx     = -1;
   Tree._lastClickIdx = -1;
   State.treeData.forEach(i => { if (i.type === 'folder' && i.lvl > 0) Tree._collapsed.add(i.path); });
-  await Persist.restore(result);
+  const restored = await Persist.restore(result);
   Tree.invalidate();
   Tree.render();
   Tree.updateSortHeadings();
+  ProfileNote.afterScan(restored);
 
   const txt = document.getElementById('scan-status-text');
   const bar  = document.getElementById('scan-progress-bar');
