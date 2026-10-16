@@ -5,6 +5,11 @@
    ============================================================ */
 
 :root {
+  /* Folder state column: pill slot centered, note icon slot on each side */
+  --state-pill-w:  72px;
+  --state-side-w:  26px;
+  --state-col-w:   calc(var(--state-pill-w) + 2 * var(--state-side-w));
+
   /* Backgrounds */
   --bg:        #f0ede6;   /* main window background */
   --card:      #ffffff;   /* white cards, panels */

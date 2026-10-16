@@ -61,6 +61,7 @@ settings.local.py
 # Logs
 *.log
 logs/
+webview2_data/
 
 # Claude
 

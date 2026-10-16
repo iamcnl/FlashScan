@@ -258,7 +258,7 @@ html {
   font-weight: 400;
 }
 .col-th-name        { flex: 1; }
-.col-th-state       { width: 100px; text-align: center; }
+.col-th-state       { width: var(--state-col-w); text-align: center; }
 .col-th-size        { width: 62px;  text-align: center; }
 .col-th-date        { width: 88px;  text-align: right; }
 
@@ -326,8 +326,16 @@ html {
 .row-name.muted  { color: var(--text3); }
 .row-name.strike { text-decoration: line-through; text-decoration-color: var(--border2); }
 
-.row-state { width: 100px; display: flex; justify-content: center; flex-shrink: 0; }
-.row-folder .row-state::before { content: ''; width: 26px; flex-shrink: 0; }
+.row-state {
+  width: var(--state-col-w);
+  display: grid;
+  grid-template-columns: var(--state-side-w) var(--state-pill-w) var(--state-side-w);
+  align-items: center;
+  flex-shrink: 0;
+}
+.row-state > .pill,
+.row-state > .row-excluded-x { grid-column: 2; justify-self: center; }
+.row-state > .note-btn       { grid-column: 3; }
 .row-size  { width: 62px;  text-align: center; font-size: 11px; color: var(--text3); font-family: var(--font-mono); flex-shrink: 0; }
 .row-date  { width: 88px;  text-align: right; font-size: 11px; color: var(--text3); flex-shrink: 0; }
 
