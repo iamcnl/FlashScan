@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from datetime import datetime
 
 try:
     import ctypes
@@ -87,11 +86,6 @@ def get_volume_info(path: str) -> dict:
     except Exception:
         pass
     return {"label": label, "serial": serial}
-
-
-def get_volume_label(path: str) -> str:
-    """Returns the volume label of the drive, or an empty string if unavailable."""
-    return get_volume_info(path)["label"]
 
 
 def make_volume_id(info: dict, root_path: str) -> str:

@@ -8,7 +8,6 @@
 const ContextMenu = (() => {
   let _el       = null;   // menu DOM element
   let _curPath  = null;
-  let _curType  = null;
   let _curItem  = null;   // { name, path, size, mtime, ... }
   let _curTree  = null;   // reference to the Tree object
 
@@ -40,7 +39,6 @@ const ContextMenu = (() => {
   function show(x, y, path, type, itemData, treeRef) {
     _ensureEl();
     _curPath = path;
-    _curType = type;
     _curItem = itemData;
     _curTree = treeRef;
 

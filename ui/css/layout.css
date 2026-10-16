@@ -28,19 +28,6 @@ html {
   -webkit-app-region: drag;
   user-select: none;
 }
-.titlebar .traffic {
-  display: flex;
-  gap: 6px;
-  -webkit-app-region: no-drag;
-}
-.titlebar .dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-}
-.titlebar .dot-r { background: #ff5f57; }
-.titlebar .dot-y { background: #febc2e; }
-.titlebar .dot-g { background: #28c840; }
 .titlebar .appname {
   font-size: 13px;
   font-weight: 600;
@@ -555,10 +542,6 @@ html {
 }
 [data-theme="dark"] .row.row-folder:hover {
   background: var(--card3);
-}
-[data-theme="dark"] .row.row-excluded {
-  background: #2a2420;
-  border-bottom-color: #3a3430;
 }
 [data-theme="dark"] .export-result.error {
   color: #e07070;

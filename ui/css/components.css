@@ -301,17 +301,6 @@
   color: var(--text3);
 }
 
-/* Ext badge (in export and tree) */
-.ext-badge {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--text3);
-  background: var(--card2);
-  border: 1px solid var(--border2);
-  border-radius: 4px;
-  padding: 1px 5px;
-}
-
 /* Format cell (export screen) */
 .fmt-cell {
   border: 1.5px solid var(--border);
@@ -655,7 +644,6 @@
 }
 .adv-cal-day:hover { background: var(--card2); color: var(--text); }
 .adv-cal-day.empty { cursor: default; pointer-events: none; }
-.adv-cal-day.other-month { color: var(--text3); }
 .adv-cal-day.in-range {
   background: var(--accent-light);
   color: var(--accent-text);
@@ -923,7 +911,7 @@
   letter-spacing: .01em;
   transition: color .15s;
 }
-.adv-options-toggle:hover { color: var(--text1); }
+.adv-options-toggle:hover { color: var(--text); }
 
 .adv-toggle-icon {
   transition: transform .2s;
@@ -949,7 +937,7 @@
   color: var(--text2);
   user-select: none;
 }
-.adv-export-check:hover span { color: var(--text1); }
+.adv-export-check:hover span { color: var(--text); }
 
 /* ── Summary inline filename editing ─────────────────────────── */
 .summary-output-label {
@@ -1014,7 +1002,7 @@
   outline: none;
   font-size: inherit;
   font-weight: 600;
-  color: var(--text1);
+  color: var(--text);
   font-family: inherit;
   padding: 0;
   min-width: 4ch;

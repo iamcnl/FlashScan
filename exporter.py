@@ -269,7 +269,7 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
         # Pre-compute file counts for each folder (including subfolders)
         folder_file_counts: dict[str, int] = {}
         folder_stack: list[tuple[int, str]] = []
-        for lvl, typ, name, fpath, size, mtime, state in items:
+        for lvl, typ, _, fpath, *_ in items:
             if typ == "folder":
                 folder_stack = [(l, p) for l, p in folder_stack if l < lvl]
                 folder_file_counts[fpath] = 0
@@ -282,7 +282,6 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
         def reorder(items: list) -> list:
             if not items:
                 return []
-            base_lvl = items[0][0]
             runs = []
             i = 0
             while i < len(items):

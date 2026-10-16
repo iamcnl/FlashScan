@@ -646,7 +646,6 @@ const Tree = {
         this._lastClickSelect = !State.selectedFiles.has(row.item.path);
         this._toggleFile(row.item.path, null);
       }
-      return;
     }
   },
 

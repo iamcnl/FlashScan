@@ -141,7 +141,7 @@ const Filters = {
         <div style="display:flex;gap:4px;">
           <input id="custom-ext-input" type="text" placeholder=".xyz or xyz"
             style="flex:1;min-width:0;padding:2px 6px;font-size:11px;border-radius:6px;
-                   border:1px solid var(--border);background:var(--bg2);color:var(--text1);outline:none;" />
+                   border:1px solid var(--border);background:var(--card2);color:var(--text);outline:none;" />
           <button id="btn-custom-ext-add" title="Add extension"
             style="padding:2px 8px;font-size:13px;border-radius:6px;border:1px solid var(--border);
                    background:var(--accent);color:#fff;cursor:pointer;line-height:1;">+</button>
@@ -568,7 +568,7 @@ const AdvFilter = {
 
     const firstDay = new Date(year, month, 1);
     // Monday as first day of week (0=Sun → 6, 1=Mon → 0, ...)
-    let startOffset = (firstDay.getDay() + 6) % 7;
+    const startOffset = (firstDay.getDay() + 6) % 7;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     let html = DAYS.map(d => `<div class="adv-cal-dow">${d}</div>`).join('');

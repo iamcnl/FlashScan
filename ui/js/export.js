@@ -59,7 +59,7 @@ const Export = {
     return `${ts}_${diskName}_LIST`  },
 
   _sanitizeStem(raw) {
-    return raw.replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+    return raw.replace(/[/\\:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
   },
 
   _diskName() {
@@ -100,7 +100,7 @@ const Export = {
     const { count, size, nameOnly } = State.exportStats();
     const fmts = this._selectedFormats();
 
-    let parts = [`<strong>${count} files</strong>`];
+    const parts = [`<strong>${count} files</strong>`];
     if (size)     parts.push(fmtSize(size));
     if (nameOnly) parts.push(`${nameOnly} folders name only`);
     if (fmts.length) parts.push(`format: <strong>${fmts.join(', ')}</strong>`);
@@ -269,7 +269,7 @@ const Export = {
 
     el.innerHTML = `<span class="export-saved-label">Saved:</span>${
       saved.map((p, i) => {
-        const name = p.replace(/.*[\/\\]/, '');
+        const name = p.replace(/.*[/\\]/, '');
         return `<span class="export-file-row">
           <a class="export-file-link" data-path="${p}" data-idx="${i}" title="Open file">${name}</a>
           <span class="export-file-actions">

@@ -38,8 +38,6 @@ body {
 }
 
 /* Monospace utility */
-.mono { font-family: var(--font-mono); }
-
 /* Screens — only one active at a time */
 .screen          { display: none; flex-direction: column; flex: 1; overflow: hidden; }
 .screen.active   { display: flex; }

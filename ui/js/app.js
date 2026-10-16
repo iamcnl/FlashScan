@@ -502,7 +502,6 @@ function startScan() {
     }
     if (result.error) {
       abortScan(result.error);
-      return;
     }
     // result.async === true → result will arrive via evaluate_js('onScanDone(...)')
   }).catch(e => {
@@ -568,7 +567,6 @@ async function onScanDone(result) {
 /* ── Dev mode (without pywebview) ── */
 function _devMode() {
   // Fake data for browser development
-  const fakeSep = '/';
   const base = '/';
   const fake = [
     { lvl:0, type:'folder', name:'SANDISK_32GB',  path:base,                       size:0,    mtime:0 },
