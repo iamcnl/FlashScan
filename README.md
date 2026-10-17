@@ -18,7 +18,7 @@ FlashScan is a Windows desktop utility for scanning disks and folders and export
 
 1. **Clone the repository:**
 ```bash
-   git clone https://github.com/coding-codess/flashscan.git
+   git clone https://github.com/iamcnl/flashscan.git
    cd flashscan
 ```
 
