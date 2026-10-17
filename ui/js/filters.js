@@ -105,13 +105,14 @@ const Filters = {
   },
 
   _extItemHTML(ext, removable = false) {
+    const e  = escapeHtml(ext);
     const rm = removable
-      ? `<span class="ext-rm" data-rm="${ext}" title="Remove">×</span>`
+      ? `<span class="ext-rm" data-rm="${e}" title="Remove">×</span>`
       : '';
     return `
-      <div class="ext-item" data-ext="${ext}">
-        <div class="ecb on" data-ecb="${ext}"></div>
-        <span class="ext-name">.${ext}</span>
+      <div class="ext-item" data-ext="${e}">
+        <div class="ecb on" data-ecb="${e}"></div>
+        <span class="ext-name">.${e}</span>
         ${rm}
       </div>`;
   },
@@ -197,7 +198,7 @@ const Filters = {
     const newVal = !allOn;
     exts.forEach(ext => {
       this._extState[ext] = newVal;
-      const ecb = document.querySelector(`[data-ecb="${ext}"]`);
+      const ecb = document.querySelector(`[data-ecb="${cssEscape(ext)}"]`);
       if (ecb) ecb.classList.toggle('on', newVal);
     });
     const gcb = document.querySelector(`[data-gcb="${groupName}"]`);
@@ -207,7 +208,7 @@ const Filters = {
 
   _toggleExt(ext) {
     this._extState[ext] = !this._extState[ext];
-    const ecb = document.querySelector(`[data-ecb="${ext}"]`);
+    const ecb = document.querySelector(`[data-ecb="${cssEscape(ext)}"]`);
     if (ecb) ecb.classList.toggle('on', this._extState[ext]);
     // Update group state
     const groupName = this._customExts.includes(ext)
@@ -327,7 +328,7 @@ const Filters = {
   _removeCustomExt(ext) {
     this._customExts = this._customExts.filter(e => e !== ext);
     delete this._extState[ext];
-    const item = document.querySelector(`[data-ext="${ext}"]`);
+    const item = document.querySelector(`[data-ext="${cssEscape(ext)}"]`);
     if (item) item.remove();
     const counter = document.getElementById('custom-grp-count');
     if (counter) counter.textContent = this._customExts.length;

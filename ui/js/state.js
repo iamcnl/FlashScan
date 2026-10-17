@@ -7,6 +7,16 @@
  *   { lvl, type, name, path, size, mtime }
  */
 
+const _HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => _HTML_ESCAPES[ch]);
+}
+
+function cssEscape(value) {
+  return CSS.escape(String(value));
+}
+
 const State = {
   treeData:      [],
   selectedFiles: new Set(),

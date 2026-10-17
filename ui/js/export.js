@@ -56,7 +56,8 @@ const Export = {
   _defaultStem(fmt) {
     const ts       = new Date().toISOString().slice(0, 10);
     const diskName = this._diskName();
-    return `${ts}_${diskName}_LIST`  },
+    return `${ts}_${this._sanitizeStem(diskName)}_LIST`;
+  },
 
   _sanitizeStem(raw) {
     return raw.replace(/[/\\:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
@@ -103,22 +104,23 @@ const Export = {
     const parts = [`<strong>${count} files</strong>`];
     if (size)     parts.push(fmtSize(size));
     if (nameOnly) parts.push(`${nameOnly} folders name only`);
-    if (fmts.length) parts.push(`format: <strong>${fmts.join(', ')}</strong>`);
+    if (fmts.length) parts.push(`format: <strong>${escapeHtml(fmts.join(', '))}</strong>`);
     else             parts.push('<span class="export-warn">⚠ no format selected</span>');
 
     const extMap = { MD: 'md', HTML: 'html', JSON: 'json', TXT: 'txt' };
 
     const fnamesHtml = fmts.length
       ? '<span class="summary-fnames">' + fmts.map(fmt => {
-          const stem = this._nameOverrides[fmt] || this._defaultStem(fmt);
-          const ext  = extMap[fmt] || fmt.toLowerCase();
-          return `<span class="summary-fname-row" data-fmt="${fmt}">` +
+          const stem  = escapeHtml(this._nameOverrides[fmt] || this._defaultStem(fmt));
+          const ext   = escapeHtml(extMap[fmt] || fmt.toLowerCase());
+          const eFmt  = escapeHtml(fmt);
+          return `<span class="summary-fname-row" data-fmt="${eFmt}">` +
             `<span class="summary-fname-text">` +
               `<span class="summary-fname-pencil"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>` +
               `<span class="summary-fname-name">${stem}<span class="summary-fname-ext">.${ext}</span></span>` +
             `</span>` +
             `<span class="summary-fname-edit" style="display:none;">` +
-              `<input class="summary-fname-input" value="${stem}" spellcheck="false" data-fmt="${fmt}" data-ext="${ext}">` +
+              `<input class="summary-fname-input" value="${stem}" spellcheck="false" data-fmt="${eFmt}" data-ext="${ext}">` +
               `<span class="summary-fname-ext-static">.${ext}</span>` +
             `</span>` +
           `</span>`;
@@ -153,7 +155,7 @@ const Export = {
         input.style.width = Math.max(clean.length, 4) + 'ch';
         this._nameOverrides[fmt] = clean;
         // Update the text label without re-rendering the whole summary
-        textEl.innerHTML = `<span class="summary-fname-pencil"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span><span class="summary-fname-name">${clean}<span class="summary-fname-ext">.${ext}</span></span>`;
+        textEl.innerHTML = `<span class="summary-fname-pencil"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span><span class="summary-fname-name">${escapeHtml(clean)}<span class="summary-fname-ext">.${escapeHtml(ext)}</span></span>`;
         editEl.style.display = 'none';
         textEl.style.display = '';
       };
@@ -264,17 +266,18 @@ const Export = {
     el.className     = 'export-result success';
 
     const errHtml = errors.length
-      ? `<span class="export-errors">${errors.join('<br>')}</span>`
+      ? `<span class="export-errors">${errors.map(escapeHtml).join('<br>')}</span>`
       : '';
 
     el.innerHTML = `<span class="export-saved-label">Saved:</span>${
       saved.map((p, i) => {
-        const name = p.replace(/.*[/\\]/, '');
+        const name  = escapeHtml(p.replace(/.*[/\\]/, ''));
+        const ePath = escapeHtml(p);
         return `<span class="export-file-row">
-          <a class="export-file-link" data-path="${p}" data-idx="${i}" title="Open file">${name}</a>
+          <a class="export-file-link" data-path="${ePath}" data-idx="${i}" title="Open file">${name}</a>
           <span class="export-file-actions">
-            <a class="export-file-open" data-path="${p}" data-idx="${i}" title="Open file"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
-            <a class="export-file-reveal" data-path="${p}" data-idx="${i}" title="Show in Finder / Explorer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></a>
+            <a class="export-file-open" data-path="${ePath}" data-idx="${i}" title="Open file"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+            <a class="export-file-reveal" data-path="${ePath}" data-idx="${i}" title="Show in Finder / Explorer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></a>
           </span>
         </span>`;
       }).join('')

@@ -46,7 +46,7 @@ const ContextMenu = (() => {
     const curState   = isFolder ? (State.folderStates[path] || 'full') : null;
 
     /* ---- Build HTML ----------------------------------------- */
-    let html = `<div class="ctx-header">${_escHtml(_truncate(itemData.name, 28))}</div>`;
+    let html = `<div class="ctx-header">${escapeHtml(_truncate(itemData.name, 28))}</div>`;
 
     /* Section 1 */
     html += `<div class="ctx-section">`;
@@ -105,15 +105,6 @@ const ContextMenu = (() => {
       <span class="ctx-label">${label}</span>
       ${checked ? `<span class="ctx-checkmark">${ICONS.check}</span>` : ''}
     </button>`;
-  }
-
-  function _escHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
   }
 
   function _truncate(s, max) {

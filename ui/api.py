@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import subprocess
 import threading
 from datetime import datetime
@@ -29,6 +30,18 @@ import settings
 
 _SYSTEM = platform.system()  # 'Windows' | 'Darwin' | 'Linux'
 
+_INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+_DENIED = {"error": "Path is outside the scanned folders."}
+
+
+def _safe_stem(stem: str, fallback: str) -> str:
+    cleaned = _INVALID_NAME_CHARS.sub("", str(stem)).strip().strip(".")
+    return cleaned[:150] or fallback
+
+
+def _norm(path: str) -> str:
+    return os.path.normcase(os.path.realpath(path))
+
 
 class API:
     def __init__(self, window_ref_holder: list):
@@ -36,6 +49,31 @@ class API:
         self._win = window_ref_holder
         self._reveal_lock = threading.Lock()
         self._revealed = False
+        self._trust_lock = threading.Lock()
+        self._trusted_roots: set[str] = set()
+        self._trusted_files: set[str] = set()
+
+    def _trust_root(self, path: str) -> None:
+        with self._trust_lock:
+            self._trusted_roots.add(_norm(path))
+
+    def _trust_file(self, path: str) -> None:
+        with self._trust_lock:
+            self._trusted_files.add(_norm(path))
+
+    def _is_trusted(self, path: str) -> bool:
+        target = _norm(path)
+        with self._trust_lock:
+            if target in self._trusted_files:
+                return True
+            roots = list(self._trusted_roots)
+        for root in roots:
+            try:
+                if os.path.commonpath([root, target]) == root:
+                    return True
+            except ValueError:
+                continue
+        return False
 
     @property
     def _window(self):
@@ -97,6 +135,8 @@ class API:
     def open_path(self, path: str) -> dict:
         """Opens a file or folder with the OS default application."""
         try:
+            if not self._is_trusted(path):
+                return _DENIED
             p = Path(path)
             if not p.exists():
                 return {"error": "Path does not exist."}
@@ -113,6 +153,8 @@ class API:
     def reveal_in_explorer(self, path: str) -> dict:
         """Reveals a file/folder in the native file manager."""
         try:
+            if not self._is_trusted(path):
+                return _DENIED
             p = Path(path)
             if not p.exists():
                 return {"error": "Path does not exist."}
@@ -132,6 +174,8 @@ class API:
     def open_properties(self, path: str) -> dict:
         """Opens the file/folder properties dialog (Windows) or returns metadata."""
         try:
+            if not self._is_trusted(path):
+                return _DENIED
             p = Path(path)
             if not p.exists():
                 return {"error": "Path does not exist."}
@@ -219,6 +263,8 @@ class API:
         if errors:
             return {"errors": errors}
 
+        self._trust_root(path)
+
         def progress_cb(count: int):
             win = self._window
             if win is None:
@@ -293,7 +339,10 @@ class API:
             if not builder:
                 errors.append(f"Unknown format: {fmt}")
                 continue
-            stem     = custom_names.get(fmt) or f"LIST_{meta['disk_name']}_{ts}"
+            stem     = _safe_stem(
+                custom_names.get(fmt) or f"LIST_{meta['disk_name']}_{ts}",
+                f"LIST_{ts}",
+            )
             fname    = f"{stem}{exts[fmt]}"
             out_file = out_path / fname
             try:
@@ -301,6 +350,7 @@ class API:
                                  include_size=include_size, include_date=include_date,
                                  folder_notes=folder_notes)
                 out_file.write_text(content, encoding="utf-8")
+                self._trust_file(str(out_file))
                 saved.append(str(out_file))
             except Exception as e:
                 errors.append(f"{fmt}: {e}")

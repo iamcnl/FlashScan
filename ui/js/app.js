@@ -464,7 +464,19 @@ function showScanError(msgs) {
   const err = document.createElement('p');
   err.id = 'scan-path-error';
   err.className = 'scan-error-msg';
-  err.innerHTML = list.map((m, i) => (i === 0 ? '<b>Error:</b> ' : '<span style="display:inline-block;width:3em"></span>') + m).join('<br>');
+  list.forEach((m, i) => {
+    if (i > 0) err.append(document.createElement('br'));
+    if (i === 0) {
+      const label = document.createElement('b');
+      label.textContent = 'Error:';
+      err.append(label, ' ');
+    } else {
+      const pad = document.createElement('span');
+      pad.style.cssText = 'display:inline-block;width:3em';
+      err.append(pad);
+    }
+    err.append(String(m));
+  });
   const footer = document.querySelector('.scan-footer');
   footer?.insertAdjacentElement('beforebegin', err);
 }
