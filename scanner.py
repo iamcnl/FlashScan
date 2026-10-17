@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
 from pathlib import Path
 
 try:
@@ -97,12 +98,17 @@ def make_volume_id(info: dict, root_path: str) -> str:
 
 # ── Main scan ─────────────────────────────────────────────────────
 
+class ScanCancelled(Exception):
+    """Raised by scan_path when cancel_event is set."""
+
+
 def scan_path(
     root_path: str,
     max_depth: int = 10,
     incl_hidden: bool = False,
     incl_system: bool = False,
     progress_cb=None,
+    cancel_event: threading.Event | None = None,
 ) -> dict:
     """
     Scans root_path and returns a dict:
@@ -118,7 +124,13 @@ def scan_path(
 
     tree is a flat list in DFS order (folder, then its contents).
     Directly compatible with JS State.reset(tree).
+
+    Raises ScanCancelled if cancel_event is set while scanning.
     """
+    def check_cancelled():
+        if cancel_event is not None and cancel_event.is_set():
+            raise ScanCancelled
+
     root = Path(root_path)
     tree: list[dict] = []
     file_count   = 0
@@ -127,6 +139,7 @@ def scan_path(
 
     path_to_idx: dict[str, int] = {}
     for dirpath, dirs, files in os.walk(root, onerror=lambda e: None):
+        check_cancelled()
         try:
             rel   = Path(dirpath).relative_to(root)
             depth = len(rel.parts)
@@ -176,6 +189,7 @@ def scan_path(
 
         folder_size = 0
         for fname in sorted(files):
+            check_cancelled()
             fpath = Path(dirpath) / fname
             if not incl_hidden and is_hidden(fpath):
                 skipped += 1
@@ -213,6 +227,7 @@ def scan_path(
                 break
             ancestor = ancestor.parent
 
+    check_cancelled()
     volume = get_volume_info(root_path)
     return {
         "tree":         tree,

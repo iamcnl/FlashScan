@@ -403,6 +403,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('btn-scan')?.addEventListener('click', () => startScan());
+  document.getElementById('btn-cancel-scan')?.addEventListener('click', () => cancelScan());
   document.getElementById('path-input')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') startScan();
   });
@@ -481,19 +482,35 @@ function showScanError(msgs) {
   footer?.insertAdjacentElement('beforebegin', err);
 }
 
+/* ── Scan run state ── */
+const Scan = { running: false, cancelling: false };
+
+function setScanBusy(busy) {
+  Scan.running = busy;
+  if (!busy) Scan.cancelling = false;
+  const scanBtn   = document.getElementById('btn-scan');
+  const cancelBtn = document.getElementById('btn-cancel-scan');
+  if (scanBtn) scanBtn.disabled = busy;
+  if (cancelBtn) {
+    cancelBtn.disabled = false;
+    cancelBtn.style.display = busy ? '' : 'none';
+  }
+}
+
 /* ── Abort progress state on error ── */
 function abortScan(msg) {
   const wrap = document.getElementById('scan-progress-wrap');
   const bar  = document.getElementById('scan-progress-bar');
-  const btn  = document.getElementById('btn-scan');
   if (bar)  bar.classList.remove('animated');
   if (wrap) wrap.style.display = 'none';
-  if (btn)  btn.disabled = false;
+  setScanBusy(false);
   showScanError(msg);
 }
 
 /* ── Scanning ── */
 function startScan() {
+  if (Scan.running) return;
+
   const path  = document.getElementById('path-input')?.value?.trim();
   const depthRaw = document.getElementById('depth-input')?.value?.trim();
   const depth = parseInt(depthRaw);
@@ -516,8 +533,7 @@ function startScan() {
   if (bar)  bar.classList.add('animated');
   if (txt)  txt.textContent = 'Scanning…';
 
-  const btn = document.getElementById('btn-scan');
-  if (btn) btn.disabled = true;
+  setScanBusy(true);
 
   // Call Python — scan runs in a thread, result comes back via onScanDone() from evaluate_js
   window.pywebview.api.scan({
@@ -529,21 +545,57 @@ function startScan() {
     }
     if (result.error) {
       abortScan(result.error);
+      return;
     }
+    // result.busy: a scan is already running, the UI keeps showing it
     // result.async === true → result will arrive via evaluate_js('onScanDone(...)')
+    // Cancel clicked before the scan was registered in Python
+    if (result.async && Scan.cancelling) window.pywebview.api.cancel_scan();
   }).catch(e => {
     abortScan(e?.message ?? String(e));
   });
 }
 
+function cancelScan() {
+  if (!Scan.running || Scan.cancelling) return;
+  Scan.cancelling = true;
+  const cancelBtn = document.getElementById('btn-cancel-scan');
+  const txt = document.getElementById('scan-status-text');
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (txt) txt.textContent = 'Cancelling…';
+  window.pywebview.api.cancel_scan().catch(e => console.error(e));
+}
+
 /** Called from Python periodically during scanning */
 function onScanProgress(count) {
+  if (Scan.cancelling) return;
   const txt = document.getElementById('scan-status-text');
   if (txt) txt.textContent = `Found ${count} files…`;
 }
 
+/** Called from Python after cancel_scan() stopped the scan */
+function onScanCancelled() {
+  const txt = document.getElementById('scan-status-text');
+  const bar = document.getElementById('scan-progress-bar');
+  if (txt) txt.textContent = 'Scan cancelled.';
+  if (bar) bar.classList.remove('animated');
+  setScanBusy(false);
+}
+
 /** Called after scanning completes */
 async function onScanDone(result) {
+  try {
+    if (result.error) {
+      abortScan(result.error);
+      return;
+    }
+    await applyScanResult(result);
+  } finally {
+    setScanBusy(false);
+  }
+}
+
+async function applyScanResult(result) {
   const { tree, file_count, folder_count, skipped, volume_label } = result;
 
   Persist.begin();
@@ -563,10 +615,8 @@ async function onScanDone(result) {
 
   const txt = document.getElementById('scan-status-text');
   const bar  = document.getElementById('scan-progress-bar');
-  const btn  = document.getElementById('btn-scan');
   if (txt) txt.textContent = `Done — ${file_count} files, ${folder_count} folders${skipped ? `, ${skipped} skipped` : ''}.`;
   if (bar) bar.classList.remove('animated');
-  if (btn) btn.disabled = false;
 
   // Show disk name
   const labelEl = document.getElementById('disk-volume-label');

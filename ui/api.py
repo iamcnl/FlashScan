@@ -49,6 +49,8 @@ class API:
         self._win = window_ref_holder
         self._reveal_lock = threading.Lock()
         self._revealed = False
+        self._scan_lock = threading.Lock()
+        self._scan_cancel: threading.Event | None = None
         self._trust_lock = threading.Lock()
         self._trusted_roots: set[str] = set()
         self._trusted_files: set[str] = set()
@@ -244,7 +246,10 @@ class API:
     def scan(self, params: dict) -> dict:
         """
         Scans a folder in a separate thread — UI will not freeze.
-        Sends the result/error back via evaluate_js('onScanDone(...)').
+        Sends the result/error back via evaluate_js('onScanDone(...)'),
+        or 'onScanCancelled()' if cancel_scan() was called.
+
+        Only one scan runs at a time; a second call returns {"busy": True}.
 
         params: { path, depth, incl_hidden, incl_system }
         """
@@ -263,11 +268,17 @@ class API:
         if errors:
             return {"errors": errors}
 
+        with self._scan_lock:
+            if self._scan_cancel is not None:
+                return {"busy": True}
+            cancel = threading.Event()
+            self._scan_cancel = cancel
+
         self._trust_root(path)
 
         def progress_cb(count: int):
             win = self._window
-            if win is None:
+            if win is None or cancel.is_set():
                 return
             try:
                 win.evaluate_js(f"onScanProgress({count})")
@@ -278,20 +289,38 @@ class API:
             win = self._window
             try:
                 result = scanner.scan_path(
-                    path, depth, incl_hidden, incl_system, progress_cb
+                    path, depth, incl_hidden, incl_system, progress_cb, cancel
                 )
+                if cancel.is_set():
+                    raise scanner.ScanCancelled
                 settings.save({"lastPath": path})
                 result["depth"] = depth
-                payload = json.dumps(result, ensure_ascii=False)
-                if win:
-                    win.evaluate_js(f"onScanDone({payload})")
+                call = f"onScanDone({json.dumps(result, ensure_ascii=False)})"
+            except scanner.ScanCancelled:
+                call = "onScanCancelled()"
             except Exception as e:
-                payload = json.dumps({"error": str(e)}, ensure_ascii=False)
-                if win:
-                    win.evaluate_js(f"onScanDone({payload})")
+                call = f"onScanDone({json.dumps({'error': str(e)}, ensure_ascii=False)})"
+
+            # Release before notifying JS so a scan started from the callback is accepted.
+            with self._scan_lock:
+                self._scan_cancel = None
+            if win:
+                try:
+                    win.evaluate_js(call)
+                except Exception:
+                    pass
 
         threading.Thread(target=_run, daemon=True).start()
         return {"async": True}
+
+    def cancel_scan(self) -> dict:
+        """Asks the running scan to stop. Returns {"ok": False} if none is running."""
+        with self._scan_lock:
+            cancel = self._scan_cancel
+        if cancel is None:
+            return {"ok": False}
+        cancel.set()
+        return {"ok": True}
 
     # ── Export ────────────────────────────────────────────────────
 

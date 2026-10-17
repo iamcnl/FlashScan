@@ -436,6 +436,7 @@ html {
 }
 .depth-input:focus { border-color: var(--accent); }
 .scan-footer  { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.scan-actions { display: flex; gap: 8px; }
 .scan-status  { font-size: 11px; color: var(--text3); font-family: var(--font-mono); }
 
 /* ── Screen 2: Export ── */
