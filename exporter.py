@@ -1,8 +1,9 @@
 """
-exporter.py — export format builders
+exporter.py — export format writers
 
-No UI dependencies. Each function takes the same arguments
-and returns a string of file content.
+No UI dependencies. iter_export() selects what goes into the export; each
+write_* function streams those items into an open text file and reports
+progress, so memory and UI responsiveness do not depend on the file count.
 
 Shares design tokens with the GUI via export_templates/export.css.
 """
@@ -42,82 +43,91 @@ def _esc(s: str) -> str:
 
 # ── Export iterator ───────────────────────────────────────────────
 
+PROGRESS_EVERY = 1000
+
+
+class _Lines:
+    """Streams lines joined by "\n" with no trailing newline, like "\n".join(lines)."""
+
+    def __init__(self, out):
+        self._out = out
+        self._first = True
+
+    def add(self, line: str) -> None:
+        self._out.write(line if self._first else "\n" + line)
+        self._first = False
+
+
 def iter_export(tree: list, folder_states: dict, selected_files: set,
                  active_exts: set | None = None):
     """
     Walks tree and yields only items that should appear in the export.
     Respects folder_states, selected_files and active_exts (extension filter).
 
+    tree is the scanner's flat DFS list: a file follows the folder entry that
+    contains it. Cost is linear in len(tree) times the folder depth.
+
     Yields: (lvl, type, name, path, size, mtime, folder_state)
     """
-    SEP = os.sep
+    sep = os.sep
+    blocking = {p for p, state in folder_states.items() if state in ("skip", "name")}
 
-    skip_prefixes = []
-    name_prefixes = []
-    for fpath, state in folder_states.items():
-        prefix = fpath + SEP
-        if state == "skip":
-            skip_prefixes.append(prefix)
-        elif state == "name":
-            name_prefixes.append(prefix)
+    def has_blocking_ancestor(path: str) -> bool:
+        if not blocking:
+            return False
+        cur = path
+        while True:
+            parent = os.path.dirname(cur)
+            if not parent or parent == cur:
+                return False
+            if parent in blocking and path.startswith(parent + sep):
+                return True
+            cur = parent
 
-    def ancestor_state(p: str) -> str | None:
-        for sp in skip_prefixes:
-            if p.startswith(sp):
-                return "skip"
-        for np in name_prefixes:
-            if p.startswith(np):
-                return "name"
-        return None
-
+    parent_blocked = False
     for item in tree:
         lvl, typ, name, fpath, size, mtime = (
             item["lvl"], item["type"], item["name"],
             item["path"], item["size"], item["mtime"],
         )
-        state = folder_states.get(fpath, "full")
 
         if typ == "folder":
-            if state == "skip":
-                continue
-            block = ancestor_state(fpath)
-            if block in ("skip", "name"):
+            state = folder_states.get(fpath, "full")
+            ancestor_blocked = has_blocking_ancestor(fpath)
+            parent_blocked = ancestor_blocked or state in ("skip", "name")
+            if state == "skip" or ancestor_blocked:
                 continue
             yield (lvl, typ, name, fpath, size, mtime, state)
 
         elif typ == "file":
             if fpath not in selected_files:
                 continue
-            # Extension filter
             if active_exts is not None:
                 ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
                 if ext and ext not in active_exts:
                     continue
-            block = ancestor_state(fpath)
-            if block in ("skip", "name"):
-                continue
-            parent_state = folder_states.get(str(Path(fpath).parent), "full")
-            if parent_state in ("skip", "name"):
+            if parent_blocked:
                 continue
             yield (lvl, typ, name, fpath, size, mtime, "full")
 
 
 # ── Markdown ──────────────────────────────────────────────────────
 
-def build_md(tree, folder_states, selected_files, meta, active_exts=None, *,
-             include_size=True, include_date=True, folder_notes=None) -> str:
+def write_md(out, items: list, meta, *, include_size=True, include_date=True,
+             folder_notes=None, progress=None) -> None:
     folder_notes = folder_notes or {}
     label = meta.get('volume_label', '')
     title = f"{label} ({meta['disk_name']})" if label else meta['disk_name']
-    lines = [
+    emit = _Lines(out).add
+    for line in (
         f"# {title} — file list\n",
         f"**Date:** {meta['timestamp']}  ",
         f"**Path:** `{meta['path']}`  ",
         f"**Files:** {meta['file_count']} · **Total:** {meta['total_size']}\n",
         "---\n",
-    ]
-    for (lvl, typ, name, fpath, size, mtime, state) in iter_export(
-            tree, folder_states, selected_files, active_exts):
+    ):
+        emit(line)
+    for n, (lvl, typ, name, fpath, size, mtime, state) in enumerate(items, 1):
         indent = "    " * lvl
         if typ == "folder":
             hdr    = "#" * min(lvl + 2, 6)
@@ -125,59 +135,76 @@ def build_md(tree, folder_states, selected_files, meta, active_exts=None, *,
             note        = folder_notes.get(fpath, "")
             note_inline = f" ({note})" if note else ""
             if lvl <= 1:
-                lines.append(f"\n{hdr} {name}{suffix}{note_inline}\n")
+                emit(f"\n{hdr} {name}{suffix}{note_inline}\n")
             else:
-                lines.append(f"{indent}- **{name}/{suffix}**{note_inline}")
+                emit(f"{indent}- **{name}/{suffix}**{note_inline}")
         else:
             sz = f" · {fmt_size(size)}" if (include_size and size) else ""
             dt = f" · {fmt_date(mtime)}" if (include_date and mtime) else ""
-            lines.append(f"{indent}- {name}{sz}{dt}")
-    return "\n".join(lines)
+            emit(f"{indent}- {name}{sz}{dt}")
+        if progress and n % PROGRESS_EVERY == 0:
+            progress(n)
+    if progress:
+        progress(len(items))
 
 
 # ── TXT ──────────────────────────────────────────────────────────
 
-def build_txt(tree, folder_states, selected_files, meta, active_exts=None, *,
-              include_size=True, include_date=True, folder_notes=None) -> str:
+def write_txt(out, items: list, meta, *, include_size=True, include_date=True,
+              folder_notes=None, progress=None) -> None:
     folder_notes = folder_notes or {}
     label = meta.get('volume_label', '')
     title = f"{label} ({meta['disk_name']})" if label else meta['disk_name']
-    lines = [
+    emit = _Lines(out).add
+    for line in (
         "=" * 60,
         f"  {title.upper()} — FILE LIST",
         f"  {meta['timestamp']}  |  {meta['path']}",
         f"  {meta['file_count']} files  |  {meta['total_size']}",
         "=" * 60 + "\n",
-    ]
-    for (lvl, typ, name, fpath, size, mtime, state) in iter_export(
-            tree, folder_states, selected_files, active_exts):
+    ):
+        emit(line)
+    for n, (lvl, typ, name, fpath, size, mtime, state) in enumerate(items, 1):
         indent = "  " * lvl
         if typ == "folder":
             suffix = "  [name only]" if state == "name" else ""
-            lines.append(f"\n{indent}[{name}/{suffix}]")
+            emit(f"\n{indent}[{name}/{suffix}]")
             note = folder_notes.get(fpath, "")
             if note:
-                lines.append(f"{indent}  > {note}")
+                emit(f"{indent}  > {note}")
         else:
             sz = f"  {fmt_size(size):<10}" if (include_size and size) else ""
             dt = f"  {fmt_date(mtime)}" if (include_date and mtime) else ""
-            lines.append(f"{indent}  {name}{sz}{dt}")
-    return "\n".join(lines)
+            emit(f"{indent}  {name}{sz}{dt}")
+        if progress and n % PROGRESS_EVERY == 0:
+            progress(n)
+    if progress:
+        progress(len(items))
 
 
 # ── JSON ─────────────────────────────────────────────────────────
 
-def build_json(tree, folder_states, selected_files, meta, active_exts=None, *,
-               include_size=True, include_date=True, folder_notes=None) -> str:
+def write_json(out, items: list, meta, *, include_size=True, include_date=True,
+               folder_notes=None, progress=None) -> None:
+    """Streams the same text as json.dumps({"meta": ..., "folders": [...]}, indent=2)."""
     folder_notes = folder_notes or {}
-    folders: dict = {}
-    current: str | None = None
+    wrote_folder = False
 
-    for (lvl, typ, name, fpath, size, mtime, state) in iter_export(
-            tree, folder_states, selected_files, active_exts):
+    def write_folder(entry: dict) -> None:
+        nonlocal wrote_folder
+        text = json.dumps(entry, ensure_ascii=False, indent=2).replace("\n", "\n    ")
+        out.write(("," if wrote_folder else "") + "\n    " + text)
+        wrote_folder = True
+
+    meta_text = json.dumps(meta, ensure_ascii=False, indent=2).replace("\n", "\n  ")
+    out.write('{\n  "meta": ' + meta_text + ',\n  "folders": [')
+
+    entry: dict | None = None
+    for n, (lvl, typ, name, fpath, size, mtime, state) in enumerate(items, 1):
         if typ == "folder":
-            current = fpath
-            entry: dict = {
+            if entry is not None:
+                write_folder(entry)
+            entry = {
                 "name":  name,
                 "path":  fpath,
                 "level": lvl,
@@ -187,21 +214,22 @@ def build_json(tree, folder_states, selected_files, meta, active_exts=None, *,
             note = folder_notes.get(fpath, "")
             if note:
                 entry["note"] = note
-            folders[fpath] = entry
-        elif typ == "file" and current:
-            entry: dict = {"name": name, "path": fpath}
+        elif typ == "file" and entry is not None:
+            file_entry: dict = {"name": name, "path": fpath}
             if include_size:
-                entry["size"]     = size
-                entry["size_fmt"] = fmt_size(size)
+                file_entry["size"]     = size
+                file_entry["size_fmt"] = fmt_size(size)
             if include_date:
-                entry["date"] = fmt_date(mtime)
-            folders[current]["files"].append(entry)
+                file_entry["date"] = fmt_date(mtime)
+            entry["files"].append(file_entry)
+        if progress and n % PROGRESS_EVERY == 0:
+            progress(n)
 
-    return json.dumps(
-        {"meta": meta, "folders": list(folders.values())},
-        ensure_ascii=False,
-        indent=2,
-    )
+    if entry is not None:
+        write_folder(entry)
+    out.write("\n  ]\n}" if wrote_folder else "]\n}")
+    if progress:
+        progress(len(items))
 
 
 # ── Extension → visual category mapping ───────────────────────────
@@ -248,12 +276,11 @@ _NOTE_ICON_SVG = (
 
 # ── HTML ─────────────────────────────────────────────────────────
 
-def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
-               include_size=True, include_date=True, folder_notes=None) -> str:
+def write_html(out, items: list, meta, *, include_size=True, include_date=True,
+               folder_notes=None, progress=None) -> None:
     folder_notes = folder_notes or {}
     css_tokens = _load_export_css()
-
-    items = list(iter_export(tree, folder_states, selected_files, active_exts))
+    emit = _Lines(out).add
 
     used_cats: dict[str, str] = {}  # label -> color, preserves insertion order
 
@@ -262,8 +289,7 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
         used_cats[label] = color
         return f'<span class="dot" style="background:{color}"></span>'
 
-    def render_tree(items: list) -> str:
-        parts: list[str] = []
+    def render_tree(items: list) -> None:
         open_levels: list[int] = []
 
         # Pre-compute file counts for each folder (including subfolders)
@@ -310,12 +336,14 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
 
         def close_until(target_lvl: int) -> None:
             while open_levels and open_levels[-1] >= target_lvl:
-                parts.append('</div>')
-                parts.append('</details>')
+                emit('</div>')
+                emit('</details>')
                 open_levels.pop()
 
         i = 0
         while i < len(items):
+            if progress and i and i % PROGRESS_EVERY == 0:
+                progress(i)
             lvl, typ, name, fpath, size, mtime, state = items[i]
 
             if typ == "folder":
@@ -331,7 +359,7 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
                 fmeta_html = " · ".join(fmeta_parts)
                 if state == "name":
                     ename = _esc(name)
-                    parts.append(
+                    emit(
                         f'<div class="folder">'
                         f'<div class="fh fh-nameonly">'
                         f'<span class="farr"></span>'
@@ -355,7 +383,7 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
                         fmeta_with_note = f'{note_meta}{" · " + fmeta_html if fmeta_html else ""}'
                     else:
                         fmeta_with_note = fmeta_html
-                    parts.append(
+                    emit(
                         f'<details class="folder"{open_attr}>'
                         f'<summary class="fh">'
                         f'<span class="farr"></span>'
@@ -373,7 +401,7 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
                 dt_str = _esc(fmt_date(mtime)) if (include_date and mtime) else ""
                 ename = _esc(name)
                 root_cls = " fi-root" if not open_levels else ""
-                parts.append(
+                emit(
                     f'<div class="fi{root_cls}">'
                     f'{dot(ext)}'
                     f'<span class="fn" title="{ename}">{ename}</span>'
@@ -384,20 +412,6 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
             i += 1
 
         close_until(-1)
-        return "\n".join(parts)
-
-    tree_html = render_tree(items)
-
-    # Legend
-    ORDER = ["Images", "Video", "Audio", "Documents", "Archives", "Code & Data", "Other"]
-    legend_items = [
-        f'<span class="leg-item"><span class="dot" style="background:{used_cats[k]}"></span>{k}</span>'
-        for k in ORDER if k in used_cats
-    ]
-    legend_html = (
-        f'<div class="legend">{"".join(legend_items)}</div>'
-        if legend_items else ""
-    )
 
     name_only = meta.get("name_only_count", 0)
     name_only_stat = (
@@ -415,7 +429,7 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
     e_timestamp    = _esc(meta['timestamp'])
     e_total_size   = _esc(meta['total_size'])
 
-    return f"""<!DOCTYPE html>
+    out.write(f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -457,7 +471,21 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
   </div>
 
   <div class="tree">
-{tree_html}
+""")
+
+    render_tree(items)
+
+    ORDER = ["Images", "Video", "Audio", "Documents", "Archives", "Code & Data", "Other"]
+    legend_items = [
+        f'<span class="leg-item"><span class="dot" style="background:{used_cats[k]}"></span>{k}</span>'
+        for k in ORDER if k in used_cats
+    ]
+    legend_html = (
+        f'<div class="legend">{"".join(legend_items)}</div>'
+        if legend_items else ""
+    )
+
+    out.write(f"""
   </div>
 
   {legend_html}
@@ -470,7 +498,17 @@ def build_html(tree, folder_states, selected_files, meta, active_exts=None, *,
 </div>
 <script>{_THEME_JS}</script>
 </body>
-</html>"""
+</html>""")
+    if progress:
+        progress(len(items))
+
+
+WRITERS = {
+    "MD":   write_md,
+    "TXT":  write_txt,
+    "JSON": write_json,
+    "HTML": write_html,
+}
 
 
 def _load_export_css() -> str:

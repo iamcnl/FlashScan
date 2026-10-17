@@ -19,6 +19,7 @@ function cssEscape(value) {
 
 const State = {
   treeData:      [],
+  scanId:        null,   // identifies the tree Python keeps; sent back with every export
   selectedFiles: new Set(),
   folderStates:  {},
   folderNotes:   {},   // { path: "note text" } — secondary locations (YouTube, Drive, etc.)
@@ -87,6 +88,25 @@ const State = {
     this._exportCache      = { count, size, nameOnly };
     this._exportCacheDirty = false;
     return this._exportCache;
+  },
+
+  selectionDelta() {
+    const selected = [];
+    const deselected = [];
+    for (const item of this.treeData) {
+      if (item.type !== 'file') continue;
+      (this.selectedFiles.has(item.path) ? selected : deselected).push(item.path);
+    }
+    const folderStates = {};
+    for (const [path, state] of Object.entries(this.folderStates)) {
+      if (state !== 'full') folderStates[path] = state;
+    }
+    return {
+      ...(deselected.length <= selected.length ? { all_except: deselected } : { only: selected }),
+      folder_states: folderStates,
+      folder_notes:  this.folderNotes,
+      active_exts:   this.activeExts ? [...this.activeExts] : null,
+    };
   },
 
   reset(treeData) {

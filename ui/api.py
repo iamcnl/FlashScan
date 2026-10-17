@@ -5,8 +5,8 @@ Methods of this class are callable from JS as:
   window.pywebview.api.method_name(args)
 
 Responsible for:
-  - scanning (runs scanner.py in a thread)
-  - export (calls exporter.py)
+  - scanning (runs scanner.py in a thread) and keeping the scanned tree
+  - export (runs exporter.py in a thread from the tree and the UI's selection)
   - dialogs (browse_directory)
   - settings (get/save) and per-drive profiles
   - window reveal once the UI has applied its settings
@@ -32,6 +32,7 @@ _SYSTEM = platform.system()  # 'Windows' | 'Darwin' | 'Linux'
 
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _DENIED = {"error": "Path is outside the scanned folders."}
+_EXPORT_EXTS = {"MD": ".md", "TXT": ".txt", "JSON": ".json", "HTML": ".html"}
 
 
 def _safe_stem(stem: str, fallback: str) -> str:
@@ -51,6 +52,10 @@ class API:
         self._revealed = False
         self._scan_lock = threading.Lock()
         self._scan_cancel: threading.Event | None = None
+        self._scan_seq = 0
+        self._scan_data: dict | None = None
+        self._export_lock = threading.Lock()
+        self._exporting = False
         self._trust_lock = threading.Lock()
         self._trusted_roots: set[str] = set()
         self._trusted_files: set[str] = set()
@@ -80,6 +85,15 @@ class API:
     @property
     def _window(self):
         return self._win[0] if self._win else None
+
+    def _notify(self, js_call: str) -> None:
+        win = self._window
+        if win is None:
+            return
+        try:
+            win.evaluate_js(js_call)
+        except Exception:
+            pass
 
     # ── Settings ───────────────────────────────────────────────────
 
@@ -273,6 +287,8 @@ class API:
                 return {"busy": True}
             cancel = threading.Event()
             self._scan_cancel = cancel
+            self._scan_seq += 1
+            scan_id = self._scan_seq
 
         self._trust_root(path)
 
@@ -286,7 +302,7 @@ class API:
                 pass
 
         def _run():
-            win = self._window
+            scan_data = None
             try:
                 result = scanner.scan_path(
                     path, depth, incl_hidden, incl_system, progress_cb, cancel
@@ -295,6 +311,13 @@ class API:
                     raise scanner.ScanCancelled
                 settings.save({"lastPath": path})
                 result["depth"] = depth
+                result["scan_id"] = scan_id
+                scan_data = {
+                    "id":           scan_id,
+                    "tree":         result["tree"],
+                    "path":         path,
+                    "volume_label": result.get("volume_label", ""),
+                }
                 call = f"onScanDone({json.dumps(result, ensure_ascii=False)})"
             except scanner.ScanCancelled:
                 call = "onScanCancelled()"
@@ -302,13 +325,12 @@ class API:
                 call = f"onScanDone({json.dumps({'error': str(e)}, ensure_ascii=False)})"
 
             # Release before notifying JS so a scan started from the callback is accepted.
+            # A cancelled or failed scan keeps the previous tree, which the UI still shows.
             with self._scan_lock:
+                if scan_data is not None:
+                    self._scan_data = scan_data
                 self._scan_cancel = None
-            if win:
-                try:
-                    win.evaluate_js(call)
-                except Exception:
-                    pass
+            self._notify(call)
 
         threading.Thread(target=_run, daemon=True).start()
         return {"async": True}
@@ -325,67 +347,114 @@ class API:
     # ── Export ────────────────────────────────────────────────────
 
     def export(self, params: dict) -> dict:
-        import exporter  # lazy
+        """
+        Validates the request, then writes the files in a separate thread.
+        Progress goes to evaluate_js('onExportProgress(done, total, fmt)'), the outcome to
+        evaluate_js('onExportDone({success, saved, errors} | {success: false, error})').
 
-        formats        = params.get("formats", [])
-        output_dir     = params.get("output_dir", "")
-        folder_states  = params.get("folder_states", {})
-        folder_notes   = params.get("folder_notes", {})
-        selected_files = set(params.get("selected_files", []))
-        # active_exts: null = all, list = allowed extensions
-        raw_exts   = params.get("active_exts", None)
-        active_exts = set(raw_exts) if raw_exts is not None else None
-        include_size = params.get("include_size", True)
-        include_date = params.get("include_date", True)
+        Only one export runs at a time; a second call returns {"busy": True}.
 
-        out_path = Path(output_dir)
+        The scanned tree stays in Python (see scan()); the UI sends only the selection:
+        params: { scan_id, formats, output_dir, custom_names, include_size, include_date,
+                  selection: { all_except | only: [file paths],
+                               folder_states: {path: state} (folders that are not "full"),
+                               folder_notes, active_exts: [ext] | null } }
+        """
+        out_path = Path(params.get("output_dir", ""))
         if not out_path.exists():
             return {"success": False, "error": "Output folder does not exist."}
         if not os.access(out_path, os.W_OK):
             return {"success": False, "error": "Cannot write to output folder (permission denied)."}
 
-        tree = params.get("tree", [])
-        if not tree:
-            return {"success": False, "error": "No data to export (tree is missing)."}
+        with self._scan_lock:
+            scan = self._scan_data
+        if scan is None or params.get("scan_id") != scan["id"]:
+            return {"success": False, "error": "Scan data is out of date. Run the scan again."}
 
-        meta = self._build_meta(tree, folder_states, selected_files, params, active_exts)
+        selection = params.get("selection")
+        if not isinstance(selection, dict):
+            return {"success": False, "error": "Selection is missing."}
 
-        builders = {
-            "MD":   exporter.build_md,
-            "TXT":  exporter.build_txt,
-            "JSON": exporter.build_json,
-            "HTML": exporter.build_html,
-        }
-        exts = {"MD": ".md", "TXT": ".txt", "JSON": ".json", "HTML": ".html"}
+        with self._export_lock:
+            if self._exporting:
+                return {"busy": True}
+            self._exporting = True
+
+        threading.Thread(
+            target=self._run_export, args=(scan, selection, params, out_path), daemon=True
+        ).start()
+        return {"async": True}
+
+    def _run_export(self, scan: dict, selection: dict, params: dict, out_path: Path) -> None:
+        try:
+            result = self._write_exports(scan, selection, params, out_path)
+        except Exception as e:
+            result = {"success": False, "error": str(e)}
+        with self._export_lock:
+            self._exporting = False
+        self._notify(f"onExportDone({json.dumps(result, ensure_ascii=False)})")
+
+    def _write_exports(self, scan: dict, selection: dict, params: dict, out_path: Path) -> dict:
+        import exporter  # lazy
+
+        formats      = params.get("formats", [])
+        include_size = params.get("include_size", True)
+        include_date = params.get("include_date", True)
         custom_names = params.get("custom_names", {})
+        folder_notes = selection.get("folder_notes", {})
+        raw_exts     = selection.get("active_exts")
+        active_exts  = set(raw_exts) if raw_exts is not None else None
+        tree         = scan["tree"]
+
+        items = list(exporter.iter_export(
+            tree, selection.get("folder_states", {}),
+            self._selected_files(tree, selection), active_exts,
+        ))
+        meta = self._build_meta(items, tree, scan)
+
+        total       = len(items)
+        valid       = [f for f in formats if f in exporter.WRITERS]
+        grand_total = total * len(valid)
+        if valid:
+            self._emit_export_progress(0, grand_total, valid[0])
 
         ts    = datetime.now().strftime("%Y-%m-%d_%H-%M")
         saved = []
         errors = []
+        finished = 0
 
         for fmt in formats:
-            builder = builders.get(fmt)
-            if not builder:
+            writer = exporter.WRITERS.get(fmt)
+            if not writer:
                 errors.append(f"Unknown format: {fmt}")
                 continue
             stem     = _safe_stem(
                 custom_names.get(fmt) or f"LIST_{meta['disk_name']}_{ts}",
                 f"LIST_{ts}",
             )
-            fname    = f"{stem}{exts[fmt]}"
-            out_file = out_path / fname
+            out_file = out_path / f"{stem}{_EXPORT_EXTS[fmt]}"
+            tmp_file = out_file.with_name(out_file.name + ".part")
+
+            def report(written: int, fmt=fmt, base=finished * total) -> None:
+                self._emit_export_progress(base + written, grand_total, fmt)
+
             try:
-                content = builder(tree, folder_states, selected_files, meta, active_exts,
-                                 include_size=include_size, include_date=include_date,
-                                 folder_notes=folder_notes)
-                out_file.write_text(content, encoding="utf-8")
+                with open(tmp_file, "w", encoding="utf-8") as fh:
+                    writer(fh, items, meta, include_size=include_size, include_date=include_date,
+                           folder_notes=folder_notes, progress=report)
+                os.replace(tmp_file, out_file)
                 self._trust_file(str(out_file))
                 saved.append(str(out_file))
             except Exception as e:
+                try:
+                    tmp_file.unlink(missing_ok=True)
+                except OSError:
+                    pass
                 errors.append(f"{fmt}: {e}")
+            finished += 1
 
         settings.save({
-            "lastOutput":  output_dir,
+            "lastOutput":  str(out_path),
             "lastFormats": formats,
         })
 
@@ -395,10 +464,20 @@ class API:
             "errors":  errors,
         }
 
-    def _build_meta(self, tree, folder_states, selected_files, params, active_exts=None) -> dict:
+    def _emit_export_progress(self, done: int, total: int, fmt: str) -> None:
+        self._notify(f"onExportProgress({done}, {total}, {json.dumps(fmt)})")
+
+    @staticmethod
+    def _selected_files(tree: list, selection: dict) -> set:
+        if "only" in selection:
+            return set(selection["only"])
+        all_files = {item["path"] for item in tree if item["type"] == "file"}
+        return all_files.difference(selection.get("all_except", ()))
+
+    def _build_meta(self, items: list, tree: list, scan: dict) -> dict:
         import exporter  # lazy
-        path = params.get("path", "")
-        volume_label = params.get("volume_label", "")
+        path = scan["path"]
+        volume_label = scan["volume_label"]
         disk_name = (
             volume_label
             or Path(path).name
@@ -406,14 +485,15 @@ class API:
             or "DISK"
         )
 
-        files: list = []
-        name_only = 0
-        for item in exporter.iter_export(tree, folder_states, selected_files, active_exts):
+        file_count = 0
+        total      = 0
+        name_only  = 0
+        for item in items:
             if item[1] == "file":
-                files.append(item)
-            elif item[1] == "folder" and item[6] == "name":
+                file_count += 1
+                total += item[4]
+            elif item[6] == "name":
                 name_only += 1
-        total         = sum(f[4] for f in files)
         folders_total = sum(1 for item in tree if item["type"] == "folder")
 
         return {
@@ -421,7 +501,7 @@ class API:
             "volume_label":     volume_label,
             "path":             path,
             "timestamp":        datetime.now().strftime("%d. %m. %Y %H:%M"),
-            "file_count":       len(files),
+            "file_count":       file_count,
             "folder_count":     folders_total,
             "total_size":       exporter.fmt_size(total),
             "name_only_count":  name_only,

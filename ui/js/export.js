@@ -1,8 +1,9 @@
 /**
  * export.js — communication with the Python backend for export
  *
- * Calls window.pywebview.api.export() and displays the result.
- * Also updates the summary box on the export screen.
+ * Calls window.pywebview.api.export() with the selection only (the tree lives in Python).
+ * The files are written in a Python thread: onExportProgress() fills the progress bar and
+ * onExportDone() shows the result. Also updates the summary box on the export screen.
  */
 
 const Export = {
@@ -193,7 +194,11 @@ const Export = {
     }
   },
 
+  _running: false,
+
   async doExport() {
+    if (this._running) return;
+
     const fmts   = this._selectedFormats();
     const outDir = document.getElementById('out-input')?.value?.trim();
 
@@ -207,47 +212,68 @@ const Export = {
       return;
     }
 
+    this._setRunning(true);
+    try {
+      const adv = this._advOptions();
+      const result = await window.pywebview.api.export({
+        scan_id:      State.scanId,
+        formats:      fmts,
+        output_dir:   outDir,
+        selection:    State.selectionDelta(),
+        include_size: adv.include_size,
+        include_date: adv.include_date,
+        custom_names: this._customNames(),
+      });
+
+      if (result.async) return;  // progress and result arrive via onExportProgress / onExportDone
+
+      this._setRunning(false);
+      if (result.busy) this._showResult('An export is already running.', 'error');
+      else             this._showResult('Error: ' + (result.error || 'unknown error'), 'error');
+    } catch (e) {
+      this._setRunning(false);
+      this._showResult('Export error: ' + e.message, 'error');
+    }
+  },
+
+  _setRunning(running) {
+    this._running = running;
     const btn  = document.getElementById('btn-export');
     const wrap = document.getElementById('export-progress-wrap');
     const bar  = document.getElementById('export-progress-bar');
     const txt  = document.getElementById('export-status-text');
-    try {
+    if (running) {
       if (btn)  { btn.disabled = true; btn.textContent = 'Exporting…'; }
       if (wrap) wrap.style.display = 'flex';
-      if (bar)  bar.classList.add('animated');
-      if (txt)  txt.textContent = 'Exporting…';
+      if (bar)  { bar.style.width = ''; bar.classList.add('animated'); }
+      if (txt)  txt.textContent = 'Preparing…';
       const exportResult = document.getElementById('export-result');
       if (exportResult) exportResult.style.display = 'none';
-
-      const adv = this._advOptions();
-      const payload = {
-        formats:        fmts,
-        output_dir:     outDir,
-        path:           document.getElementById('path-input')?.value?.trim() || '',
-        volume_label:   State.volumeLabel || '',
-        tree:           State.treeData,
-        folder_states:  State.folderStates,
-        folder_notes:   State.folderNotes,
-        selected_files: [...State.selectedFiles],
-        active_exts:    State.activeExts ? [...State.activeExts] : null,
-        include_size:   adv.include_size,
-        include_date:   adv.include_date,
-        custom_names:   this._customNames(),
-      };
-
-      const result = await window.pywebview.api.export(payload);
-
-      if (result.success) {
-        this._showResultFiles(result.saved || [], result.errors || []);
-      } else {
-        this._showResult('Error: ' + (result.error || 'unknown error'), 'error');
-      }
-    } catch (e) {
-      this._showResult('Export error: ' + e.message, 'error');
-    } finally {
+    } else {
       if (btn)  { btn.disabled = false; btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> export'; }
       if (bar)  bar.classList.remove('animated');
       if (wrap) wrap.style.display = 'none';
+    }
+  },
+
+  /** Called from Python while the files are being written */
+  onProgress(done, total, fmt) {
+    if (!this._running) return;
+    const bar = document.getElementById('export-progress-bar');
+    const txt = document.getElementById('export-status-text');
+    const pct = total ? Math.min(100, Math.round(done / total * 100)) : 100;
+    if (bar) { bar.classList.remove('animated'); bar.style.width = `${pct}%`; }
+    if (txt) txt.textContent = `Writing ${fmt}… ${pct} %`;
+  },
+
+  /** Called from Python when all formats are written (or the export failed) */
+  onDone(result) {
+    this._setRunning(false);
+    if (result.success) {
+      this._showResultFiles(result.saved || [], result.errors || []);
+    } else {
+      const detail = result.error || (result.errors || []).join('; ') || 'unknown error';
+      this._showResult('Error: ' + detail, 'error');
     }
   },
 
@@ -293,5 +319,8 @@ const Export = {
     document.getElementById('btn-new-scan')?.addEventListener('click', () => Nav.reset());
   },
 };
+
+function onExportProgress(done, total, fmt) { Export.onProgress(done, total, fmt); }
+function onExportDone(result) { Export.onDone(result); }
 
 /** fmtSize available globally (defined in tree.js, loaded earlier) */

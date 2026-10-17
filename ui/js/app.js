@@ -600,6 +600,7 @@ async function applyScanResult(result) {
 
   Persist.begin();
   State.reset(tree);
+  State.scanId = result.scan_id ?? null;
   State.volumeLabel = volume_label || '';
   await Filters.init();
   AdvFilter.init();
