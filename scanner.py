@@ -102,6 +102,13 @@ class ScanCancelled(Exception):
     """Raised by scan_path when cancel_event is set."""
 
 
+MAX_UNREADABLE_DETAILS = 200
+
+
+def _reason(error: OSError) -> str:
+    return error.strerror or type(error).__name__
+
+
 def scan_path(
     root_path: str,
     max_depth: int = 10,
@@ -116,7 +123,10 @@ def scan_path(
         'tree':         [{ lvl, type, name, path, size, mtime }, ...],
         'file_count':   int,
         'folder_count': int,
-        'skipped':      int,
+        'skipped':      int,   # hidden/system entries left out by the options, not errors
+        'unreadable_count': int,
+        'unreadable':   [{ path, kind: 'folder' | 'file' | 'date', reason }, ...],  # first 200
+        'beyond_depth': int,   # folders just below max_depth that were not scanned
         'volume_label': str,
         'volume_id':    str,   # serial:XXXXXXXX or path:<normalized scan path>
         'volume_root':  str,   # drive root; profile keys are relative to it
@@ -125,7 +135,8 @@ def scan_path(
     tree is a flat list in DFS order (folder, then its contents).
     Directly compatible with JS State.reset(tree).
 
-    Raises ScanCancelled if cancel_event is set while scanning.
+    Raises ScanCancelled if cancel_event is set while scanning, and OSError if
+    root_path itself cannot be read.
     """
     def check_cancelled():
         if cancel_event is not None and cancel_event.is_set():
@@ -136,9 +147,29 @@ def scan_path(
     file_count   = 0
     folder_count = 0
     skipped      = 0
+    unreadable: list[dict] = []
+    unreadable_count = 0
+    beyond_depth = 0
+
+    def note_unreadable(path, kind: str, error: OSError) -> None:
+        nonlocal unreadable_count
+        unreadable_count += 1
+        if len(unreadable) < MAX_UNREADABLE_DETAILS:
+            unreadable.append({"path": str(path), "kind": kind, "reason": _reason(error)})
+
+    def on_walk_error(error: OSError) -> None:
+        path = str(error.filename) if error.filename else "?"
+        if path == str(root):
+            raise OSError(f"Cannot read {root}: {_reason(error)}") from error
+        try:
+            too_deep = len(Path(path).relative_to(root).parts) > max_depth
+        except ValueError:
+            too_deep = False
+        if not too_deep:
+            note_unreadable(path, "folder", error)
 
     path_to_idx: dict[str, int] = {}
-    for dirpath, dirs, files in os.walk(root, onerror=lambda e: None):
+    for dirpath, dirs, files in os.walk(root, onerror=on_walk_error):
         check_cancelled()
         try:
             rel   = Path(dirpath).relative_to(root)
@@ -147,6 +178,7 @@ def scan_path(
             depth = 0
 
         if depth > max_depth:
+            beyond_depth += 1
             dirs.clear()
             continue
 
@@ -173,8 +205,9 @@ def scan_path(
         try:
             fst    = Path(dirpath).stat()
             fmtime = fst.st_mtime
-        except OSError:
+        except OSError as e:
             fmtime = 0
+            note_unreadable(dirpath, "date", e)
 
         folder_entry = {
             "lvl":   depth,
@@ -201,8 +234,8 @@ def scan_path(
                 st    = fpath.stat()
                 size  = st.st_size
                 mtime = st.st_mtime
-            except OSError:
-                skipped += 1
+            except OSError as e:
+                note_unreadable(fpath, "file", e)
                 continue
 
             tree.append({
@@ -234,6 +267,9 @@ def scan_path(
         "file_count":   file_count,
         "folder_count": folder_count,
         "skipped":      skipped,
+        "unreadable_count": unreadable_count,
+        "unreadable":   unreadable,
+        "beyond_depth": beyond_depth,
         "volume_label": volume["label"],
         "volume_id":    make_volume_id(volume, root_path),
         "volume_root":  str(root.anchor),

@@ -175,6 +175,82 @@ const ConfirmDialog = {
 };
 
 /* ── Drive profile note (status bar) ── */
+/* ── Scan issues banner: unreadable entries and the depth limit ── */
+const ScanIssues = {
+  KIND_LABEL: { folder: 'folder not scanned', file: 'file skipped', date: 'date unknown' },
+
+  init() {
+    document.getElementById('scan-issues-toggle')?.addEventListener('click', () => this._toggle());
+    document.getElementById('scan-issues-close')?.addEventListener('click', () => {
+      this.hide();
+      Tree.render();
+    });
+  },
+
+  show(result) {
+    const items   = result.unreadable ?? [];
+    const count   = result.unreadable_count ?? 0;
+    const tooDeep = result.beyond_depth ?? 0;
+    if (!count && !tooDeep) { this.hide(); return; }
+
+    const parts = [];
+    if (count) {
+      parts.push(`${count} ${count === 1 ? 'item' : 'items'} couldn\u2019t be read`);
+    }
+    if (tooDeep) {
+      parts.push(`${tooDeep} ${tooDeep === 1 ? 'folder' : 'folders'} below the depth limit (${result.depth}) `
+        + `${tooDeep === 1 ? 'wasn\u2019t' : 'weren\u2019t'} scanned`);
+    }
+    document.getElementById('scan-issues-text').textContent = parts.join(' \u00B7 ');
+
+    const list = document.getElementById('scan-issues-list');
+    list.replaceChildren(...items.map(item => this._row(item)));
+    if (count > items.length) {
+      const more = document.createElement('li');
+      more.textContent = `\u2026 and ${count - items.length} more`;
+      list.append(more);
+    }
+    list.style.display = 'none';
+
+    const toggle = document.getElementById('scan-issues-toggle');
+    toggle.style.display = items.length ? '' : 'none';
+    toggle.textContent = 'show details';
+    toggle.setAttribute('aria-expanded', 'false');
+    document.getElementById('scan-issues').style.display = '';
+  },
+
+  hide() {
+    const box = document.getElementById('scan-issues');
+    if (box) box.style.display = 'none';
+  },
+
+  _row(item) {
+    const li     = document.createElement('li');
+    const kind   = document.createElement('span');
+    const path   = document.createElement('span');
+    const reason = document.createElement('span');
+    kind.className   = 'scan-issues-kind';
+    path.className   = 'scan-issues-path';
+    reason.className = 'scan-issues-reason';
+    kind.textContent   = this.KIND_LABEL[item.kind] ?? item.kind;
+    path.textContent   = item.path;
+    path.title         = item.path;
+    reason.textContent = item.reason;
+    li.append(kind, path, reason);
+    return li;
+  },
+
+  _toggle() {
+    const list   = document.getElementById('scan-issues-list');
+    const toggle = document.getElementById('scan-issues-toggle');
+    const open   = list.style.display === 'none';
+    list.style.display = open ? '' : 'none';
+    toggle.textContent = open ? 'hide details' : 'show details';
+    toggle.setAttribute('aria-expanded', String(open));
+    Tree.render();
+  },
+};
+
 const ProfileNote = {
   UNDO_MS: 10000,
 
@@ -373,6 +449,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   AdvFilter.init();
   Export.init();
   ProfileNote.init();
+  ScanIssues.init();
 
   // Navigation — steps are clickable
   document.querySelectorAll('.step[data-step]').forEach(el => {
@@ -596,7 +673,7 @@ async function onScanDone(result) {
 }
 
 async function applyScanResult(result) {
-  const { tree, file_count, folder_count, skipped, volume_label } = result;
+  const { tree, file_count, folder_count, skipped, unreadable_count, volume_label } = result;
 
   Persist.begin();
   State.reset(tree);
@@ -609,6 +686,7 @@ async function applyScanResult(result) {
   Tree._lastClickIdx = -1;
   State.treeData.forEach(i => { if (i.type === 'folder' && i.lvl > 0) Tree._collapsed.add(i.path); });
   const restored = await Persist.restore(result);
+  ScanIssues.show(result);
   Tree.invalidate();
   Tree.render();
   Tree.updateSortHeadings();
@@ -616,7 +694,8 @@ async function applyScanResult(result) {
 
   const txt = document.getElementById('scan-status-text');
   const bar  = document.getElementById('scan-progress-bar');
-  if (txt) txt.textContent = `Done — ${file_count} files, ${folder_count} folders${skipped ? `, ${skipped} skipped` : ''}.`;
+  if (txt) txt.textContent = `Done — ${file_count} files, ${folder_count} folders`
+    + `${skipped ? `, ${skipped} skipped` : ''}${unreadable_count ? `, ${unreadable_count} unreadable` : ''}.`;
   if (bar) bar.classList.remove('animated');
 
   // Show disk name
