@@ -35,6 +35,22 @@ _DENIED = {"error": "Path is outside the scanned folders."}
 _EXPORT_EXTS = {"MD": ".md", "TXT": ".txt", "JSON": ".json", "HTML": ".html"}
 
 
+def _reserve_unique(path: Path) -> Path:
+    """
+    Creates an empty file at path, or at "name (2).ext", "name (3).ext", ...
+    when the name is taken, so an existing file is never overwritten.
+    """
+    for n in range(1, 10_000):
+        candidate = path if n == 1 else path.with_name(f"{path.stem} ({n}){path.suffix}")
+        try:
+            with open(candidate, "x"):
+                pass
+            return candidate
+        except FileExistsError:
+            continue
+    raise OSError(f"No free file name for {path.name}")
+
+
 def _safe_stem(stem: str, fallback: str) -> str:
     cleaned = _INVALID_NAME_CHARS.sub("", str(stem)).strip().strip(".")
     return cleaned[:150] or fallback
@@ -432,25 +448,31 @@ class API:
                 custom_names.get(fmt) or f"LIST_{meta['disk_name']}_{ts}",
                 f"LIST_{ts}",
             )
-            out_file = out_path / f"{stem}{_EXPORT_EXTS[fmt]}"
-            tmp_file = out_file.with_name(out_file.name + ".part")
+            target   = out_path / f"{stem}{_EXPORT_EXTS[fmt]}"
+            out_file = None
+            tmp_file = None
 
             def report(written: int, fmt=fmt, base=finished * total) -> None:
                 self._emit_export_progress(base + written, grand_total, fmt)
 
             try:
+                out_file = _reserve_unique(target)
+                tmp_file = out_file.with_name(out_file.name + ".part")
                 with open(tmp_file, "w", encoding="utf-8") as fh:
                     writer(fh, items, meta, include_size=include_size, include_date=include_date,
                            folder_notes=folder_notes, progress=report)
                 os.replace(tmp_file, out_file)
+            except Exception as e:
+                for ours in (tmp_file, out_file):
+                    if ours is not None:
+                        try:
+                            ours.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                errors.append(f"{fmt}: {e}")
+            else:
                 self._trust_file(str(out_file))
                 saved.append(str(out_file))
-            except Exception as e:
-                try:
-                    tmp_file.unlink(missing_ok=True)
-                except OSError:
-                    pass
-                errors.append(f"{fmt}: {e}")
             finished += 1
 
         settings.save({
