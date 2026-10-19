@@ -13,6 +13,7 @@ from __future__ import annotations
 import html as _html
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -39,6 +40,28 @@ def fmt_date(ts: float) -> str:
 def _esc(s: str) -> str:
     """Escapes HTML special characters for safe insertion into attributes and content."""
     return _html.escape(str(s), quote=True)
+
+
+_MD_SPECIAL = re.compile(r"([\\`*_\[\]<>#|~&])")
+_MD_LEADING_MARKER = re.compile(r"^(?:([-+])|(\d+)([.)]))")
+_LINE_BREAKS = re.compile(r"\s*[\r\n]+\s*")
+
+
+def _md_esc(s: str) -> str:
+    """Escapes Markdown syntax so text renders literally; line breaks become spaces."""
+    text = _MD_SPECIAL.sub(r"\\\1", _LINE_BREAKS.sub(" ", str(s)))
+    return _MD_LEADING_MARKER.sub(
+        lambda m: "\\" + m.group(1) if m.group(1) else m.group(2) + "\\" + m.group(3), text
+    )
+
+
+def _md_code(s: str) -> str:
+    """Wraps text in a code span whose fence is longer than any backtick run inside it."""
+    text = _LINE_BREAKS.sub(" ", str(s))
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * (longest + 1)
+    pad = " " if text.startswith("`") or text.endswith("`") else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
 
 
 # ── Export iterator ───────────────────────────────────────────────
@@ -117,22 +140,23 @@ def write_md(out, items: list, meta, *, include_size=True, include_date=True,
              folder_notes=None, progress=None) -> None:
     folder_notes = folder_notes or {}
     label = meta.get('volume_label', '')
-    title = f"{label} ({meta['disk_name']})" if label else meta['disk_name']
+    title = _md_esc(f"{label} ({meta['disk_name']})" if label else meta['disk_name'])
     emit = _Lines(out).add
     for line in (
         f"# {title} — file list\n",
         f"**Date:** {meta['timestamp']}  ",
-        f"**Path:** `{meta['path']}`  ",
+        f"**Path:** {_md_code(meta['path'])}  ",
         f"**Files:** {meta['file_count']} · **Total:** {meta['total_size']}\n",
         "---\n",
     ):
         emit(line)
     for n, (lvl, typ, name, fpath, size, mtime, state) in enumerate(items, 1):
         indent = "    " * lvl
+        name = _md_esc(name)
         if typ == "folder":
             hdr    = "#" * min(lvl + 2, 6)
             suffix = " *(contents omitted)*" if state == "name" else ""
-            note        = folder_notes.get(fpath, "")
+            note        = _md_esc(folder_notes.get(fpath, ""))
             note_inline = f" ({note})" if note else ""
             if lvl <= 1:
                 emit(f"\n{hdr} {name}{suffix}{note_inline}\n")

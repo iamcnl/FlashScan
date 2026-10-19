@@ -366,10 +366,61 @@ def test_markdown_omits_size_and_date_when_asked_or_empty():
     assert DATE not in bare
 
 
-def test_markdown_writes_names_verbatim():
+def test_markdown_escapes_special_characters_in_file_names():
     items = [row(0, "folder", "drive", "", 0), row(1, "file", "*star* #hash `tick`.txt", "x", 1)]
 
-    assert "    - *star* #hash `tick`.txt" in render(exporter.write_md, items)
+    assert "    - \\*star\\* \\#hash \\`tick\\`.txt" in render(exporter.write_md, items)
+
+
+@pytest.mark.parametrize("name, escaped", [
+    ("[click](http://example.com).txt", "\\[click\\](http://example.com).txt"),
+    ("<script>alert(1)</script>", "\\<script\\>alert(1)\\</script\\>"),
+    ("my_file_name.txt", "my\\_file\\_name.txt"),
+    ("a|b~c&amp;d", "a\\|b\\~c\\&amp;d"),
+    ("back\\slash.txt", "back\\\\slash.txt"),
+    ("1. intro.txt", "1\\. intro.txt"),
+    ("- dash.txt", "\\- dash.txt"),
+    ("two\nlines.txt", "two lines.txt"),
+])
+def test_markdown_escapes_each_kind_of_markup(name, escaped):
+    items = [row(0, "folder", "drive", "", 0), row(1, "file", name, "x", 1)]
+
+    assert f"    - {escaped} · 1 B" in render(exporter.write_md, items)
+
+
+def test_markdown_leaves_plain_names_untouched():
+    items = [row(0, "folder", "drive", "", 0), row(1, "file", "Report (final) v2.0 - copy.txt", "x", 1)]
+
+    assert "    - Report (final) v2.0 - copy.txt" in render(exporter.write_md, items)
+
+
+def test_markdown_escapes_folder_names_in_headings_and_bold_bullets():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "folder", "a*b", "a", 0),
+        row(2, "folder", "c**d", "a/c", 0),
+    ]
+    out = render(exporter.write_md, items)
+
+    assert "### a\\*b" in out
+    assert "        - **c\\*\\*d/**" in out
+
+
+def test_markdown_escapes_folder_notes():
+    items = [row(0, "folder", "drive", "", 0), row(1, "folder", "a", "a", 0), row(2, "folder", "b", "a/b", 0)]
+    notes = {path_of("a"): "see [this](http://x) *now*", path_of("a/b"): "# not a heading"}
+    out = render(exporter.write_md, items, folder_notes=notes)
+
+    assert "### a (see \\[this\\](http://x) \\*now\\*)" in out
+    assert "- **b/** (\\# not a heading)" in out
+
+
+def test_markdown_escapes_title_and_keeps_path_in_a_code_span():
+    meta = {**META, "volume_label": "My_USB *1*", "path": "/mnt/odd`name"}
+    out = render(exporter.write_md, [], meta)
+
+    assert out.startswith("# My\\_USB \\*1\\* (E:) — file list")
+    assert "**Path:** ``/mnt/odd`name``  " in out
 
 
 # ── TXT ──────────────────────────────────────────────────────────
@@ -775,13 +826,23 @@ def test_every_writer_works_without_a_progress_callback(fmt):
     assert render(exporter.WRITERS[fmt], GOLDEN_ITEMS, progress=None)
 
 
-@pytest.mark.parametrize("fmt", ["MD", "TXT"])
-def test_text_writers_keep_unicode_and_punctuation_names(fmt):
+def test_txt_writer_keeps_unicode_and_punctuation_names():
     names = ["naïve ☃ 日本語.txt", "a & b.txt", "it's #1 [x] {y}.txt", "say \"hi\".txt"]
     items = [row(0, "folder", "drive", "", 0)] + [row(1, "file", n, f"f{i}", 1) for i, n in enumerate(names)]
-    out = render(exporter.WRITERS[fmt], items)
+    out = render(exporter.write_txt, items)
 
     assert all(name in out for name in names)
+
+
+def test_markdown_writer_keeps_unicode_and_escapes_punctuation_names():
+    names = ["naïve ☃ 日本語.txt", "a & b.txt", "it's #1 [x] {y}.txt", "say \"hi\".txt"]
+    items = [row(0, "folder", "drive", "", 0)] + [row(1, "file", n, f"f{i}", 1) for i, n in enumerate(names)]
+    out = render(exporter.write_md, items)
+
+    assert "naïve ☃ 日本語.txt" in out
+    assert "a \\& b.txt" in out
+    assert "it's \\#1 \\[x\\] {y}.txt" in out
+    assert "say \"hi\".txt" in out
 
 
 def test_html_keeps_unicode_and_punctuation_names():
