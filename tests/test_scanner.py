@@ -182,6 +182,21 @@ def test_max_depth_zero_scans_only_the_root(root):
     assert r["beyond_depth"] == 1
 
 
+def test_folders_below_the_depth_limit_are_never_listed(root, monkeypatch):
+    build(root, {"a/b/c/deep.txt": 1})
+    listed = []
+    real_scandir = os.scandir
+
+    def spy(path):
+        listed.append(os.path.basename(os.fspath(path)))
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", spy)
+    scan(root, max_depth=2)
+
+    assert "c" not in listed
+
+
 def test_nothing_is_beyond_depth_when_everything_fits(root):
     build(root, {"a/b/c.txt": 1})
 

@@ -161,12 +161,7 @@ def scan_path(
         path = str(error.filename) if error.filename else "?"
         if path == str(root):
             raise OSError(f"Cannot read {root}: {_reason(error)}") from error
-        try:
-            too_deep = len(Path(path).relative_to(root).parts) > max_depth
-        except ValueError:
-            too_deep = False
-        if not too_deep:
-            note_unreadable(path, "folder", error)
+        note_unreadable(path, "folder", error)
 
     path_to_idx: dict[str, int] = {}
     for dirpath, dirs, files in os.walk(root, onerror=on_walk_error):
@@ -176,11 +171,6 @@ def scan_path(
             depth = len(rel.parts)
         except ValueError:
             depth = 0
-
-        if depth > max_depth:
-            beyond_depth += 1
-            dirs.clear()
-            continue
 
         # Filter subdirectories
         filtered_dirs = []
@@ -196,7 +186,12 @@ def scan_path(
                 skipped += 1
                 continue
             filtered_dirs.append(d)
-        dirs[:] = filtered_dirs
+
+        if depth >= max_depth:
+            beyond_depth += len(filtered_dirs)
+            dirs.clear()
+        else:
+            dirs[:] = filtered_dirs
 
         folder_count += 1
         folder_name = Path(dirpath).name or root.name
