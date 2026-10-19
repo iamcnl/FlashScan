@@ -478,7 +478,7 @@ class API:
             tree, selection.get("folder_states", {}),
             self._selected_files(tree, selection), active_exts,
         ))
-        meta = self._build_meta(items, tree, scan)
+        meta = self._build_meta(items, scan)
 
         total       = len(items)
         valid       = [f for f in formats if f in exporter.WRITERS]
@@ -557,7 +557,7 @@ class API:
         all_files = {item["path"] for item in tree if item["type"] == "file"}
         return all_files.difference(selection.get("all_except", ()))
 
-    def _build_meta(self, items: list, tree: list, scan: dict) -> dict:
+    def _build_meta(self, items: list, scan: dict) -> dict:
         import exporter  # lazy
         path = scan["path"]
         volume_label = scan["volume_label"]
@@ -568,16 +568,19 @@ class API:
             or "DISK"
         )
 
-        file_count = 0
-        total      = 0
-        name_only  = 0
+        file_count   = 0
+        folder_count = 0
+        total        = 0
+        name_only    = 0
         for item in items:
             if item[1] == "file":
                 file_count += 1
                 total += item[4]
-            elif item[6] == "name":
-                name_only += 1
-        folders_total = sum(1 for item in tree if item["type"] == "folder")
+            else:
+                if item[0] > 0:
+                    folder_count += 1
+                if item[6] == "name":
+                    name_only += 1
 
         return {
             "disk_name":        disk_name,
@@ -585,7 +588,7 @@ class API:
             "path":             path,
             "timestamp":        datetime.now().strftime("%d. %m. %Y %H:%M"),
             "file_count":       file_count,
-            "folder_count":     folders_total,
+            "folder_count":     folder_count,
             "total_size":       exporter.fmt_size(total),
             "name_only_count":  name_only,
             "generated_by":     "flashscan",
