@@ -23,10 +23,17 @@ from datetime import datetime
 from pathlib import Path
 
 import json
+import logging
+import time
 
 import webview  # pywebview
 
+import logger
 import settings
+
+log = logging.getLogger(__name__)
+
+MAX_LOGGED_UNREADABLE = 20
 
 _SYSTEM = platform.system()  # 'Windows' | 'Darwin' | 'Linux'
 
@@ -109,7 +116,7 @@ class API:
         try:
             win.evaluate_js(js_call)
         except Exception:
-            pass
+            log.warning("evaluate_js failed for %s", js_call.split("(", 1)[0], exc_info=True)
 
     # ── Settings ───────────────────────────────────────────────────
 
@@ -134,16 +141,30 @@ class API:
     def delete_profile(self, volume_id: str) -> None:
         settings.delete_profile(volume_id)
 
+    # ── Logging ───────────────────────────────────────────────────
+
+    def log_js(self, level: str, message: str, source: str = "") -> None:
+        logger.log_js(level, message, source)
+
+    def open_log_folder(self) -> dict:
+        path = logger.log_file()
+        if path is None:
+            return {"error": "No log file is available."}
+        self._trust_file(str(path))
+        return self.reveal_in_explorer(str(path))
+
     # ── Window ────────────────────────────────────────────────────
 
     def ui_ready(self) -> None:
-        self.reveal()
+        self.reveal(ui_reported=True)
 
-    def reveal(self) -> None:
+    def reveal(self, ui_reported: bool = False) -> None:
         with self._reveal_lock:
             if self._revealed:
                 return
             self._revealed = True
+        if not ui_reported:
+            log.warning("UI did not report ready in time; revealing the window anyway")
         win = self._window
         if win:
             win.maximize()
@@ -296,10 +317,12 @@ class API:
         if not Path(path).exists():
             errors.append("Path does not exist.")
         if errors:
+            log.warning("Scan rejected: %s (path=%r)", "; ".join(errors), path)
             return {"errors": errors}
 
         with self._scan_lock:
             if self._scan_cancel is not None:
+                log.info("Scan rejected: another scan is running")
                 return {"busy": True}
             cancel = threading.Event()
             self._scan_cancel = cancel
@@ -307,6 +330,10 @@ class API:
             scan_id = self._scan_seq
 
         self._trust_root(path)
+        log.info(
+            "Scan started: id=%d path=%r depth=%d hidden=%s system=%s",
+            scan_id, path, depth, incl_hidden, incl_system,
+        )
 
         def progress_cb(count: int):
             win = self._window
@@ -319,6 +346,7 @@ class API:
 
         def _run():
             scan_data = None
+            started = time.monotonic()
             try:
                 result = scanner.scan_path(
                     path, depth, incl_hidden, incl_system, progress_cb, cancel
@@ -335,9 +363,12 @@ class API:
                     "volume_label": result.get("volume_label", ""),
                 }
                 call = f"onScanDone({json.dumps(result, ensure_ascii=False)})"
+                self._log_scan_result(scan_id, result, time.monotonic() - started)
             except scanner.ScanCancelled:
+                log.info("Scan cancelled: id=%d after %.1fs", scan_id, time.monotonic() - started)
                 call = "onScanCancelled()"
             except Exception as e:
+                log.exception("Scan failed: id=%d path=%r", scan_id, path)
                 call = f"onScanDone({json.dumps({'error': str(e)}, ensure_ascii=False)})"
 
             # Release before notifying JS so a scan started from the callback is accepted.
@@ -350,6 +381,20 @@ class API:
 
         threading.Thread(target=_run, daemon=True).start()
         return {"async": True}
+
+    @staticmethod
+    def _log_scan_result(scan_id: int, result: dict, seconds: float) -> None:
+        log.info(
+            "Scan finished: id=%d files=%d folders=%d skipped=%d unreadable=%d beyond_depth=%d in %.1fs",
+            scan_id, result["file_count"], result["folder_count"], result["skipped"],
+            result["unreadable_count"], result["beyond_depth"], seconds,
+        )
+        shown = result["unreadable"][:MAX_LOGGED_UNREADABLE]
+        for entry in shown:
+            log.warning("Unreadable %s: %s (%s)", entry["kind"], entry["path"], entry["reason"])
+        hidden = result["unreadable_count"] - len(shown)
+        if hidden > 0:
+            log.warning("... and %d more unreadable entries", hidden)
 
     def cancel_scan(self) -> dict:
         """Asks the running scan to stop. Returns {"ok": False} if none is running."""
@@ -378,21 +423,22 @@ class API:
         """
         out_path = Path(params.get("output_dir", ""))
         if not out_path.exists():
-            return {"success": False, "error": "Output folder does not exist."}
+            return self._refuse_export("Output folder does not exist.", out_path)
         if not os.access(out_path, os.W_OK):
-            return {"success": False, "error": "Cannot write to output folder (permission denied)."}
+            return self._refuse_export("Cannot write to output folder (permission denied).", out_path)
 
         with self._scan_lock:
             scan = self._scan_data
         if scan is None or params.get("scan_id") != scan["id"]:
-            return {"success": False, "error": "Scan data is out of date. Run the scan again."}
+            return self._refuse_export("Scan data is out of date. Run the scan again.", out_path)
 
         selection = params.get("selection")
         if not isinstance(selection, dict):
-            return {"success": False, "error": "Selection is missing."}
+            return self._refuse_export("Selection is missing.", out_path)
 
         with self._export_lock:
             if self._exporting:
+                log.info("Export rejected: another export is running")
                 return {"busy": True}
             self._exporting = True
 
@@ -401,10 +447,16 @@ class API:
         ).start()
         return {"async": True}
 
+    @staticmethod
+    def _refuse_export(message: str, out_path: Path) -> dict:
+        log.warning("Export rejected: %s (output=%r)", message, str(out_path))
+        return {"success": False, "error": message}
+
     def _run_export(self, scan: dict, selection: dict, params: dict, out_path: Path) -> None:
         try:
             result = self._write_exports(scan, selection, params, out_path)
         except Exception as e:
+            log.exception("Export failed unexpectedly (output=%r)", str(out_path))
             result = {"success": False, "error": str(e)}
         with self._export_lock:
             self._exporting = False
@@ -431,6 +483,8 @@ class API:
         total       = len(items)
         valid       = [f for f in formats if f in exporter.WRITERS]
         grand_total = total * len(valid)
+        started     = time.monotonic()
+        log.info("Export started: formats=%s items=%d output=%r", formats, total, str(out_path))
         if valid:
             self._emit_export_progress(0, grand_total, valid[0])
 
@@ -442,6 +496,7 @@ class API:
         for fmt in formats:
             writer = exporter.WRITERS.get(fmt)
             if not writer:
+                log.warning("Export skipped unknown format: %r", fmt)
                 errors.append(f"Unknown format: {fmt}")
                 continue
             stem     = _safe_stem(
@@ -463,6 +518,7 @@ class API:
                            folder_notes=folder_notes, progress=report)
                 os.replace(tmp_file, out_file)
             except Exception as e:
+                log.exception("Export failed: format=%s target=%s", fmt, out_file or target)
                 for ours in (tmp_file, out_file):
                     if ours is not None:
                         try:
@@ -473,12 +529,17 @@ class API:
             else:
                 self._trust_file(str(out_file))
                 saved.append(str(out_file))
+                log.info("Export saved: %s", out_file)
             finished += 1
 
         settings.save({
             "lastOutput":  str(out_path),
             "lastFormats": formats,
         })
+        log.info(
+            "Export finished: saved=%d errors=%d in %.1fs",
+            len(saved), len(errors), time.monotonic() - started,
+        )
 
         return {
             "success": len(saved) > 0,

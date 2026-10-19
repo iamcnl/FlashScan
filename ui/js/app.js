@@ -790,3 +790,10 @@ const Theme = {
 };
 
 Theme.init();
+
+document.getElementById('btn-open-log')?.addEventListener('click', async () => {
+  try {
+    const r = await window.pywebview?.api?.open_log_folder();
+    if (r?.error) console.error('Cannot open log folder: ' + r.error);
+  } catch (e) { console.error(e); }
+});
