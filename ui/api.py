@@ -34,6 +34,7 @@ import settings
 log = logging.getLogger(__name__)
 
 MAX_LOGGED_UNREADABLE = 20
+MAX_LOGGED_LINKS = 20
 
 _SYSTEM = platform.system()  # 'Windows' | 'Darwin' | 'Linux'
 
@@ -385,9 +386,9 @@ class API:
     @staticmethod
     def _log_scan_result(scan_id: int, result: dict, seconds: float) -> None:
         log.info(
-            "Scan finished: id=%d files=%d folders=%d skipped=%d unreadable=%d beyond_depth=%d in %.1fs",
+            "Scan finished: id=%d files=%d folders=%d skipped=%d unreadable=%d beyond_depth=%d links=%d in %.1fs",
             scan_id, result["file_count"], result["folder_count"], result["skipped"],
-            result["unreadable_count"], result["beyond_depth"], seconds,
+            result["unreadable_count"], result["beyond_depth"], result["links_skipped"], seconds,
         )
         shown = result["unreadable"][:MAX_LOGGED_UNREADABLE]
         for entry in shown:
@@ -395,6 +396,12 @@ class API:
         hidden = result["unreadable_count"] - len(shown)
         if hidden > 0:
             log.warning("... and %d more unreadable entries", hidden)
+        listed_links = result["links"][:MAX_LOGGED_LINKS]
+        for link in listed_links:
+            log.info("Link not followed (%s): %s -> %s", link["kind"], link["path"], link["target"])
+        more_links = result["links_skipped"] - len(listed_links)
+        if more_links > 0:
+            log.info("... and %d more links", more_links)
 
     def cancel_scan(self) -> dict:
         """Asks the running scan to stop. Returns {"ok": False} if none is running."""

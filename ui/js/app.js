@@ -256,9 +256,12 @@ const SettingsDialog = {
 document.getElementById('btn-open-settings')?.addEventListener('click', () => SettingsDialog.open());
 
 /* ── Drive profile note (status bar) ── */
-/* ── Scan issues banner: unreadable entries and the depth limit ── */
+/* ── Scan issues banner: unreadable entries, links and the depth limit ── */
 const ScanIssues = {
-  KIND_LABEL: { folder: 'folder not scanned', file: 'file skipped', date: 'date unknown' },
+  KIND_LABEL: {
+    folder: 'folder not scanned', file: 'file skipped', date: 'date unknown',
+    'link-folder': 'folder link not followed', 'link-file': 'file link not followed',
+  },
 
   init() {
     document.getElementById('scan-issues-toggle')?.addEventListener('click', () => this._toggle());
@@ -269,14 +272,24 @@ const ScanIssues = {
   },
 
   show(result) {
-    const items   = result.unreadable ?? [];
-    const count   = result.unreadable_count ?? 0;
-    const tooDeep = result.beyond_depth ?? 0;
-    if (!count && !tooDeep) { this.hide(); return; }
+    const unreadable = result.unreadable ?? [];
+    const links      = (result.links ?? []).map(link => ({
+      kind:   `link-${link.kind}`,
+      path:   link.path,
+      reason: link.target ? `\u2192 ${link.target}` : '',
+    }));
+    const items     = [...unreadable, ...links];
+    const count     = result.unreadable_count ?? 0;
+    const linkCount = result.links_skipped ?? 0;
+    const tooDeep   = result.beyond_depth ?? 0;
+    if (!count && !linkCount && !tooDeep) { this.hide(); return; }
 
     const parts = [];
     if (count) {
       parts.push(`${count} ${count === 1 ? 'item' : 'items'} couldn\u2019t be read`);
+    }
+    if (linkCount) {
+      parts.push(`${linkCount} ${linkCount === 1 ? 'link' : 'links'} not followed`);
     }
     if (tooDeep) {
       parts.push(`${tooDeep} ${tooDeep === 1 ? 'folder' : 'folders'} below the depth limit (${result.depth}) `
@@ -286,9 +299,10 @@ const ScanIssues = {
 
     const list = document.getElementById('scan-issues-list');
     list.replaceChildren(...items.map(item => this._row(item)));
-    if (count > items.length) {
+    const unlisted = (count - unreadable.length) + (linkCount - links.length);
+    if (unlisted > 0) {
       const more = document.createElement('li');
-      more.textContent = `\u2026 and ${count - items.length} more`;
+      more.textContent = `\u2026 and ${unlisted} more`;
       list.append(more);
     }
     list.style.display = 'none';
@@ -755,7 +769,7 @@ async function onScanDone(result) {
 }
 
 async function applyScanResult(result) {
-  const { tree, file_count, folder_count, skipped, unreadable_count, volume_label } = result;
+  const { tree, file_count, folder_count, skipped, unreadable_count, links_skipped, volume_label } = result;
 
   Persist.begin();
   State.reset(tree);
@@ -777,7 +791,8 @@ async function applyScanResult(result) {
   const txt = document.getElementById('scan-status-text');
   const bar  = document.getElementById('scan-progress-bar');
   if (txt) txt.textContent = `Done — ${file_count} files, ${folder_count} folders`
-    + `${skipped ? `, ${skipped} skipped` : ''}${unreadable_count ? `, ${unreadable_count} unreadable` : ''}.`;
+    + `${skipped ? `, ${skipped} skipped` : ''}${unreadable_count ? `, ${unreadable_count} unreadable` : ''}`
+    + `${links_skipped ? `, ${links_skipped} ${links_skipped === 1 ? 'link' : 'links'} not followed` : ''}.`;
   if (bar) bar.classList.remove('animated');
 
   // Show disk name

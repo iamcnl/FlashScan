@@ -8,6 +8,7 @@ Returns a flat list of dict items compatible with JS State.reset().
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
 import threading
 from pathlib import Path
@@ -103,10 +104,17 @@ class ScanCancelled(Exception):
 
 
 MAX_UNREADABLE_DETAILS = 200
+MAX_LINK_DETAILS = 200
+
+IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
 
 
 def _reason(error: OSError) -> str:
     return error.strerror or type(error).__name__
+
+
+def _is_link(st: os.stat_result) -> bool:
+    return stat.S_ISLNK(st.st_mode) or getattr(st, "st_reparse_tag", 0) == IO_REPARSE_TAG_MOUNT_POINT
 
 
 def scan_path(
@@ -127,6 +135,8 @@ def scan_path(
         'unreadable_count': int,
         'unreadable':   [{ path, kind: 'folder' | 'file' | 'date', reason }, ...],  # first 200
         'beyond_depth': int,   # folders just below max_depth that were not scanned
+        'links_skipped': int,  # symlinks and junctions that were not followed
+        'links':        [{ path, kind: 'folder' | 'file', target }, ...],  # first 200
         'volume_label': str,
         'volume_id':    str,   # serial:XXXXXXXX or path:<normalized scan path>
         'volume_root':  str,   # drive root; profile keys are relative to it
@@ -134,6 +144,9 @@ def scan_path(
 
     tree is a flat list in DFS order (folder, then its contents).
     Directly compatible with JS State.reset(tree).
+
+    Symlinks and NTFS junctions are never followed or listed, so a link can neither
+    loop the scan nor count the same files twice. root_path itself may be a link.
 
     Raises ScanCancelled if cancel_event is set while scanning, and OSError if
     root_path itself cannot be read.
@@ -150,12 +163,24 @@ def scan_path(
     unreadable: list[dict] = []
     unreadable_count = 0
     beyond_depth = 0
+    links: list[dict] = []
+    links_skipped = 0
 
     def note_unreadable(path, kind: str, error: OSError) -> None:
         nonlocal unreadable_count
         unreadable_count += 1
         if len(unreadable) < MAX_UNREADABLE_DETAILS:
             unreadable.append({"path": str(path), "kind": kind, "reason": _reason(error)})
+
+    def note_link(path, kind: str) -> None:
+        nonlocal links_skipped
+        links_skipped += 1
+        if len(links) < MAX_LINK_DETAILS:
+            try:
+                target = os.readlink(path)
+            except OSError:
+                target = ""
+            links.append({"path": str(path), "kind": kind, "target": target})
 
     def on_walk_error(error: OSError) -> None:
         path = str(error.filename) if error.filename else "?"
@@ -184,6 +209,13 @@ def scan_path(
                 continue
             if not incl_system and is_system(dpath):
                 skipped += 1
+                continue
+            try:
+                dir_is_link = _is_link(os.lstat(dpath))
+            except OSError:
+                dir_is_link = False  # os.walk reports an unreadable folder itself
+            if dir_is_link:
+                note_link(dpath, "folder")
                 continue
             filtered_dirs.append(d)
 
@@ -226,12 +258,15 @@ def scan_path(
                 skipped += 1
                 continue
             try:
-                st    = fpath.stat()
-                size  = st.st_size
-                mtime = st.st_mtime
+                st = os.lstat(fpath)
             except OSError as e:
                 note_unreadable(fpath, "file", e)
                 continue
+            if _is_link(st):
+                note_link(fpath, "file")
+                continue
+            size  = st.st_size
+            mtime = st.st_mtime
 
             tree.append({
                 "lvl":   depth + 1,
@@ -265,6 +300,8 @@ def scan_path(
         "unreadable_count": unreadable_count,
         "unreadable":   unreadable,
         "beyond_depth": beyond_depth,
+        "links_skipped": links_skipped,
+        "links":        links,
         "volume_label": volume["label"],
         "volume_id":    make_volume_id(volume, root_path),
         "volume_root":  str(root.anchor),

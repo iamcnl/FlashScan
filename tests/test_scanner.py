@@ -1,6 +1,8 @@
 import os
 import pathlib
+import stat
 import threading
+import types
 
 import pytest
 
@@ -26,9 +28,9 @@ def item(result, name):
     return next(i for i in result["tree"] if i["name"] == name)
 
 
-def broken_link(root, name):
+def link(root, name, target, directory=False):
     try:
-        os.symlink(root / "missing-target", root / name)
+        os.symlink(target, root / name, target_is_directory=directory)
     except (OSError, NotImplementedError):
         pytest.skip("symlinks are not available here")
 
@@ -45,12 +47,27 @@ def no_volume_lookup(monkeypatch):
     monkeypatch.setattr(scanner, "get_volume_info", lambda path: {"label": "", "serial": None})
 
 
+@pytest.fixture
+def unreadable_file(monkeypatch):
+    real_lstat = os.lstat
+    denied = set()
+
+    def lstat(path, *args, **kwargs):
+        if os.path.basename(os.fspath(path)) in denied:
+            raise PermissionError(13, "Permission denied", os.fspath(path))
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "lstat", lstat)
+    return denied.add
+
+
 # ── Result shape ─────────────────────────────────────────────────
 
 def test_result_has_all_keys_the_ui_expects(root):
     assert set(scan(root)) == {
         "tree", "file_count", "folder_count", "skipped", "unreadable_count",
-        "unreadable", "beyond_depth", "volume_label", "volume_id", "volume_root",
+        "unreadable", "beyond_depth", "links_skipped", "links",
+        "volume_label", "volume_id", "volume_root",
     }
 
 
@@ -321,25 +338,26 @@ def test_unreadable_root_raises(root, target):
         scan(root / target)
 
 
-def test_unreadable_file_is_reported_not_swallowed(root):
-    build(root, {"ok.txt": 4})
-    broken_link(root, "broken.lnk")
+def test_unreadable_file_is_reported_not_swallowed(root, unreadable_file):
+    build(root, {"ok.txt": 4, "denied.txt": 4})
+    unreadable_file("denied.txt")
     r = scan(root)
 
     assert r["unreadable_count"] == 1
     entry = r["unreadable"][0]
     assert entry["kind"] == "file"
-    assert entry["path"].endswith("broken.lnk")
-    assert entry["reason"]
+    assert entry["path"].endswith("denied.txt")
+    assert entry["reason"] == "Permission denied"
     assert names(r, "file") == ["ok.txt"]
     assert r["file_count"] == 1
     assert r["skipped"] == 0
 
 
-def test_unreadable_details_are_capped_but_count_is_true(root, monkeypatch):
+def test_unreadable_details_are_capped_but_count_is_true(root, monkeypatch, unreadable_file):
     monkeypatch.setattr(scanner, "MAX_UNREADABLE_DETAILS", 2)
     for n in range(3):
-        broken_link(root, f"broken{n}.lnk")
+        build(root, {f"denied{n}.txt": 1})
+        unreadable_file(f"denied{n}.txt")
     r = scan(root)
 
     assert r["unreadable_count"] == 3
@@ -395,6 +413,120 @@ def test_unreadable_folder_date_is_reported_and_zeroed(root, monkeypatch):
         {"path": str(root / "weird"), "kind": "date", "reason": "Input/output error"},
     ]
     assert names(r, "file") == ["x.txt"]
+
+
+# ── Symlinks and junctions ───────────────────────────────────────
+
+def test_file_link_is_counted_not_listed(root):
+    build(root, {"real.txt": 5})
+    link(root, "alias.txt", root / "real.txt")
+    r = scan(root)
+
+    assert names(r, "file") == ["real.txt"]
+    assert r["file_count"] == 1
+    assert item(r, "drive")["size"] == 5
+    assert r["links_skipped"] == 1
+    assert r["links"] == [
+        {"path": str(root / "alias.txt"), "kind": "file", "target": str(root / "real.txt")},
+    ]
+
+
+def test_folder_link_is_not_followed_or_listed(root):
+    build(root, {"real/inner.txt": 3})
+    link(root, "alias", root / "real", directory=True)
+    r = scan(root)
+
+    assert names(r, "folder") == ["drive", "real"]
+    assert names(r, "file") == ["inner.txt"]
+    assert r["folder_count"] == 2
+    assert item(r, "drive")["size"] == 3
+    assert r["links_skipped"] == 1
+    assert r["links"][0]["kind"] == "folder"
+    assert r["links"][0]["target"] == str(root / "real")
+
+
+def test_link_back_to_an_ancestor_cannot_loop_the_scan(root):
+    build(root, {"a/f.txt": 1})
+    link(root, "a/up", root, directory=True)
+    r = scan(root)
+
+    assert names(r, "file") == ["f.txt"]
+    assert r["links_skipped"] == 1
+
+
+def test_broken_link_is_a_link_not_an_unreadable_file(root):
+    build(root, {"ok.txt": 1})
+    link(root, "broken.lnk", root / "missing-target")
+    r = scan(root)
+
+    assert r["links_skipped"] == 1
+    assert r["unreadable_count"] == 0
+    assert names(r, "file") == ["ok.txt"]
+
+
+def test_link_details_are_capped_but_count_is_true(root, monkeypatch):
+    monkeypatch.setattr(scanner, "MAX_LINK_DETAILS", 2)
+    for n in range(3):
+        link(root, f"l{n}", root / "missing-target")
+    r = scan(root)
+
+    assert r["links_skipped"] == 3
+    assert len(r["links"]) == 2
+
+
+def test_hidden_link_counts_as_hidden_unless_hidden_entries_are_included(root):
+    link(root, ".hidden-link", root / "missing-target")
+
+    r = scan(root)
+    assert (r["skipped"], r["links_skipped"]) == (1, 0)
+
+    r = scan(root, incl_hidden=True)
+    assert (r["skipped"], r["links_skipped"]) == (0, 1)
+
+
+def test_scan_root_may_itself_be_a_link(tmp_path):
+    real = tmp_path / "real"
+    build(real, {"f.txt": 2})
+    alias = tmp_path / "alias"
+    link(tmp_path, "alias", real, directory=True)
+    r = scan(alias)
+
+    assert names(r, "file") == ["f.txt"]
+    assert r["links_skipped"] == 0
+
+
+def test_is_link_recognises_symlinks_and_junctions_but_not_other_reparse_points():
+    symlink  = types.SimpleNamespace(st_mode=stat.S_IFLNK | 0o777)
+    junction = types.SimpleNamespace(
+        st_mode=stat.S_IFDIR | 0o777, st_reparse_tag=scanner.IO_REPARSE_TAG_MOUNT_POINT
+    )
+    cloud    = types.SimpleNamespace(st_mode=stat.S_IFDIR | 0o777, st_reparse_tag=0x9000001A)
+    plain    = types.SimpleNamespace(st_mode=stat.S_IFREG | 0o644)
+
+    assert scanner._is_link(symlink)
+    assert scanner._is_link(junction)
+    assert not scanner._is_link(cloud)
+    assert not scanner._is_link(plain)
+
+
+def test_junction_is_skipped_like_a_symlink(root, monkeypatch):
+    build(root, {"real/inner.txt": 1, "junction/inner.txt": 1})
+    real_lstat = os.lstat
+
+    def lstat(path, *args, **kwargs):
+        st = real_lstat(path, *args, **kwargs)
+        if os.path.basename(os.fspath(path)) == "junction":
+            return types.SimpleNamespace(
+                st_mode=st.st_mode, st_reparse_tag=scanner.IO_REPARSE_TAG_MOUNT_POINT
+            )
+        return st
+
+    monkeypatch.setattr(os, "lstat", lstat)
+    r = scan(root)
+
+    assert names(r, "folder") == ["drive", "real"]
+    assert names(r, "file") == ["inner.txt"]
+    assert r["links"] == [{"path": str(root / "junction"), "kind": "folder", "target": ""}]
 
 
 # ── Volume identity ──────────────────────────────────────────────
