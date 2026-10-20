@@ -108,6 +108,8 @@ MAX_LINK_DETAILS = 200
 
 IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
 
+_IS_WINDOWS = os.name == "nt"
+
 
 def _reason(error: OSError) -> str:
     return error.strerror or type(error).__name__
@@ -115,6 +117,19 @@ def _reason(error: OSError) -> str:
 
 def _is_link(st: os.stat_result) -> bool:
     return stat.S_ISLNK(st.st_mode) or getattr(st, "st_reparse_tag", 0) == IO_REPARSE_TAG_MOUNT_POINT
+
+
+def _link_target(path) -> str:
+    try:
+        target = os.readlink(path)
+    except OSError:
+        return ""
+    if _IS_WINDOWS:
+        if target.startswith("\\\\?\\UNC\\"):
+            return "\\\\" + target[8:]
+        if target.startswith("\\\\?\\"):
+            return target[4:]
+    return target
 
 
 def scan_path(
@@ -176,11 +191,7 @@ def scan_path(
         nonlocal links_skipped
         links_skipped += 1
         if len(links) < MAX_LINK_DETAILS:
-            try:
-                target = os.readlink(path)
-            except OSError:
-                target = ""
-            links.append({"path": str(path), "kind": kind, "target": target})
+            links.append({"path": str(path), "kind": kind, "target": _link_target(path)})
 
     def on_walk_error(error: OSError) -> None:
         path = str(error.filename) if error.filename else "?"

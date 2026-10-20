@@ -509,6 +509,35 @@ def test_is_link_recognises_symlinks_and_junctions_but_not_other_reparse_points(
     assert not scanner._is_link(plain)
 
 
+@pytest.mark.parametrize("raw, expected", [
+    ("\\\\?\\C:\\drive\\real", "C:\\drive\\real"),
+    ("\\\\?\\UNC\\server\\share\\real", "\\\\server\\share\\real"),
+    ("C:\\drive\\real", "C:\\drive\\real"),
+    ("..\\real", "..\\real"),
+])
+def test_link_targets_lose_the_windows_extended_path_prefix(monkeypatch, raw, expected):
+    monkeypatch.setattr(scanner, "_IS_WINDOWS", True)
+    monkeypatch.setattr(os, "readlink", lambda path: raw)
+
+    assert scanner._link_target("any") == expected
+
+
+def test_link_targets_are_left_alone_off_windows(monkeypatch):
+    monkeypatch.setattr(scanner, "_IS_WINDOWS", False)
+    monkeypatch.setattr(os, "readlink", lambda path: "\\\\?\\odd-but-legal")
+
+    assert scanner._link_target("any") == "\\\\?\\odd-but-legal"
+
+
+def test_link_target_is_empty_when_it_cannot_be_read(monkeypatch):
+    def unreadable(path):
+        raise OSError("not a link")
+
+    monkeypatch.setattr(os, "readlink", unreadable)
+
+    assert scanner._link_target("any") == ""
+
+
 def test_junction_is_skipped_like_a_symlink(root, monkeypatch):
     build(root, {"real/inner.txt": 1, "junction/inner.txt": 1})
     real_lstat = os.lstat
