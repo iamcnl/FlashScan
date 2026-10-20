@@ -37,6 +37,15 @@ body {
   border-radius: var(--r-sm);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Monospace utility */
 /* Screens — only one active at a time */
 .screen          { display: none; flex-direction: column; flex: 1; overflow: hidden; }

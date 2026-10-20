@@ -82,8 +82,11 @@ These shortcuts are active in the file tree on Step 2.
 | `Ctrl+D` | Deselect all files |
 | `Ctrl+E` | Expand all folders |
 | `Ctrl+W` | Collapse all folders |
+| `Tab` | Move focus into the file tree |
 | `↑` / `↓` | Move focus up / down |
-| `←` / `→` | Collapse / expand the focused folder |
+| `Home` / `End` | Focus the first / last row |
+| `→` | Expand the focused folder; if already open, move to its first child |
+| `←` | Collapse the focused folder; otherwise move to its parent |
 | `Space` | Toggle file selection; cycle folder state (full → name only → skip) |
 | `Enter` | Toggle file selection; collapse / expand the focused folder |
 | `Shift+Click` | Range-select files |

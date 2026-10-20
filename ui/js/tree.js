@@ -7,14 +7,14 @@ const FOLDER_H = 32;
 const OVERSCAN = 15;
 
 const IC = {
-  disk:    `<span class="ic-primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></span>`,
-  folder:  `<span class="ic-primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>`,
-  folderD: `<span class="ic-muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>`,
-  file:    `<span class="ic-muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>`,
-  img:     `<span class="ic-muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>`,
-  video:   `<span class="ic-muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>`,
-  audio:   `<span class="ic-muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>`,
-  archive: `<span class="ic-muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>`,
+  disk:    `<span class="ic-primary" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></span>`,
+  folder:  `<span class="ic-primary" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>`,
+  folderD: `<span class="ic-muted" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>`,
+  file:    `<span class="ic-muted" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>`,
+  img:     `<span class="ic-muted" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>`,
+  video:   `<span class="ic-muted" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>`,
+  audio:   `<span class="ic-muted" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>`,
+  archive: `<span class="ic-muted" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>`,
   check:   `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
   ckG:     `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
   listI:   `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
@@ -37,6 +37,13 @@ const PILLS = [
   { state:'partial', cls:'pill-partial', icon: IC.partI, label:'partial' },
 ];
 
+const STATE_SPOKEN = {
+  full:    'all files included',
+  name:    'names only',
+  skip:    'skipped',
+  partial: 'partly included',
+};
+
 function fmtSize(b) {
   if (!b)             return '';
   if (b < 1024)       return `${b} B`;
@@ -58,7 +65,7 @@ function getExt(name) {
 }
 function pillHtml(state) {
   const p = PILLS.find(x => x.state === state) || PILLS[0];
-  return `<span class="pill ${p.cls}" data-pill>${p.icon}${p.label}</span>`;
+  return `<span class="pill ${p.cls}" data-pill aria-hidden="true">${p.icon}${p.label}</span>`;
 }
 
 /* ═══════════════════════════════════════════════════════════ */
@@ -79,6 +86,9 @@ const Tree = {
     this._container = containerEl;
     containerEl.style.position = 'relative';
     containerEl.style.overflow = 'auto';
+    containerEl.setAttribute('role', 'tree');
+    containerEl.setAttribute('aria-label', 'Files and folders');
+    containerEl.tabIndex = 0;
 
     this._inner = document.createElement('div');
     this._inner.style.cssText = 'position:relative;width:100%;';
@@ -91,6 +101,7 @@ const Tree = {
     containerEl.addEventListener('scroll',      () => this.render(), { passive: true });
     containerEl.addEventListener('click',       e => this._onClick(e));
     containerEl.addEventListener('contextmenu', e => this._onContextMenu(e));
+    containerEl.addEventListener('focus',       () => this._onTreeFocus());
 
     // Global menu close on click outside
     document.addEventListener('click',   () => ContextMenu.hide());
@@ -282,10 +293,27 @@ const Tree = {
       y += rows[j].type === 'folder' ? FOLDER_H : ROW_H;
     }
 
+    this._numberRows(rows);
     this._flatRows = rows;
     this._offsets  = offsets;
     this._totalH   = y;
     this._dirty    = false;
+  },
+
+  // Rows are virtualised, so the DOM never holds a full sibling set;
+  // aria-posinset / aria-setsize have to come from the flat list.
+  _numberRows(rows) {
+    const groups = [];
+    for (const row of rows) {
+      groups.length = Math.min(groups.length, row.depth + 1);
+      const group = groups[row.depth] || (groups[row.depth] = { size: 0 });
+      row.pos = ++group.size;
+      row.group = group;
+    }
+    for (const row of rows) {
+      row.size = row.group.size;
+      delete row.group;
+    }
   },
 
   /* ── Render ────────────────────────────────────────────── */
@@ -296,6 +324,7 @@ const Tree = {
     this._inner.style.height = this._totalH + 'px';
 
     if (this._flatRows.length === 0) {
+      this._container.removeAttribute('aria-activedescendant');
       this._rowsEl.innerHTML =
         '<div style="padding:24px 16px;font-size:12px;color:#9a9d94;">No results</div>';
       this.updateStats();
@@ -317,20 +346,31 @@ const Tree = {
 
     const parts = [];
     for (let j = startIdx; j <= endIdx; j++) {
-      const { type, item, depth } = this._flatRows[j];
+      const { type, item, depth, pos, size } = this._flatRows[j];
       const top     = this._offsets[j];
       const h       = type === 'folder' ? FOLDER_H : ROW_H;
       const focused = j === this._focusIdx;
+      const aria    = `role="treeitem" id="${this._rowId(j)}" aria-level="${depth + 1}" ` +
+                      `aria-posinset="${pos}" aria-setsize="${size}"`;
       parts.push(type === 'folder'
-        ? this._rowFolder(item, depth, top, h, focused)
-        : this._rowFile(item, depth, top, h, focused));
+        ? this._rowFolder(item, depth, top, h, focused, aria)
+        : this._rowFile(item, depth, top, h, focused, aria));
     }
     this._rowsEl.innerHTML = parts.join('');
+    this._syncActiveDescendant(startIdx, endIdx);
     this.updateStats();
   },
 
+  _rowId(idx) { return `tree-row-${idx}`; },
+
+  _syncActiveDescendant(startIdx, endIdx) {
+    const idx = this._focusIdx;
+    if (idx >= startIdx && idx <= endIdx) this._container.setAttribute('aria-activedescendant', this._rowId(idx));
+    else this._container.removeAttribute('aria-activedescendant');
+  },
+
   /* ── Row HTML ──────────────────────────────────────────── */
-  _rowFolder(item, depth, top, h, focused) {
+  _rowFolder(item, depth, top, h, focused, aria = '') {
     const state     = State.folderStates[item.path] || 'full';
     const collapsed = this._collapsed.has(item.path);
     const indent    = 12 + depth * 16;
@@ -345,19 +385,23 @@ const Tree = {
     const escapedNote = escapeHtml(note);
     const ePath       = escapeHtml(item.path);
     const eName       = escapeHtml(item.name);
+    const label       = escapeHtml([
+      item.name, 'folder', STATE_SPOKEN[state] || STATE_SPOKEN.full, sz, note && `note: ${note}`,
+    ].filter(Boolean).join(', '));
     const noteIcon    = depth === 0
       ? '<span class="note-btn note-spacer" aria-hidden="true"></span>'
       : note
-      ? `<span class="note-btn note-active" data-note-btn="${ePath}" title="${escapedNote}">` +
+      ? `<span class="note-btn note-active" data-note-btn="${ePath}" title="${escapedNote}" aria-hidden="true">` +
         `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>`
-      : `<span class="note-btn note-empty" data-note-btn="${ePath}" title="Add note">` +
+      : `<span class="note-btn note-empty" data-note-btn="${ePath}" title="Add note" aria-hidden="true">` +
         `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>`;
 
-    return `<div class="row row-folder${dimmed}${focusCls}" data-path="${ePath}" data-type="folder"
+    return `<div class="row row-folder${dimmed}${focusCls}" ${aria} aria-expanded="${!collapsed}"
+      aria-label="${label}" data-path="${ePath}" data-type="folder"
       style="position:absolute;top:${top}px;height:${h}px;left:0;right:0;
              padding-left:${indent}px;box-sizing:border-box;
              display:flex;align-items:center;gap:4px;">
-      <span class="row-arrow" data-arrow-toggle="${ePath}">${collapsed ? '▶' : '▼'}</span>
+      <span class="row-arrow" data-arrow-toggle="${ePath}" aria-hidden="true">${collapsed ? '▶' : '▼'}</span>
       ${icon}
       <span class="${nameCls}">${eName}</span>
       <div class="row-state">${pillHtml(state)}${noteIcon}</div>
@@ -366,7 +410,7 @@ const Tree = {
     </div>`;
   },
 
-  _rowFile(item, depth, top, h, focused) {
+  _rowFile(item, depth, top, h, focused, aria = '') {
     const checked  = State.selectedFiles.has(item.path);
     const indent   = 12 + depth * 16;
     const sz       = fmtSize(item.size);
@@ -374,17 +418,19 @@ const Tree = {
     const cbCls    = checked ? 'fcb on' : 'fcb off';
     const nameCls  = checked ? 'row-name' : 'row-name muted strike';
     const opacity  = checked ? '' : 'opacity:.5;';
-    const statePill = checked ? '' : '<span class="row-excluded-x">✕</span>';
+    const statePill = checked ? '' : '<span class="row-excluded-x" aria-hidden="true">✕</span>';
     const focusCls = focused ? ' row-focused' : '';
     const ePath    = escapeHtml(item.path);
     const eName    = escapeHtml(item.name);
+    const label    = escapeHtml([item.name, sz, dt].filter(Boolean).join(', '));
 
     const rowCls = checked ? `row${focusCls}` : `row row-excluded${focusCls}`;
-    return `<div class="${rowCls}" data-path="${ePath}" data-type="file"
+    return `<div class="${rowCls}" ${aria} aria-checked="${checked}"
+      aria-label="${label}" data-path="${ePath}" data-type="file"
       style="position:absolute;top:${top}px;height:${h}px;left:0;right:0;
              padding-left:${indent}px;${opacity}box-sizing:border-box;
              display:flex;align-items:center;gap:4px;">
-      <div class="${cbCls}" data-cb-toggle="${ePath}">${checked ? IC.check : ''}</div>
+      <div class="${cbCls}" data-cb-toggle="${ePath}" aria-hidden="true">${checked ? IC.check : ''}</div>
       ${fileIcon(item.name)}
       <span class="${nameCls}">${eName}</span>
       <div class="row-state">${statePill}</div>
@@ -559,95 +605,101 @@ const Tree = {
       return;
     }
 
-    // Arrows and Space/Enter — only work if focus exists or tree has rows
+    if (ctrl || e.altKey || !this._ownsNavigationKeys()) return;
+
     const rows = this._flatRows;
     if (rows.length === 0) return;
 
-    // ↑ / ↓ — move focus
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      const dir  = e.key === 'ArrowUp' ? -1 : 1;
-      const next = Math.max(0, Math.min(rows.length - 1,
-        this._focusIdx < 0 ? (dir > 0 ? 0 : rows.length - 1)
-                           : this._focusIdx + dir));
-      this._focusIdx = next;
-      this._scrollToIdx(next);
-      this.invalidate();
-      this.render();
-      return;
-    }
+    const idx = this._focusIdx;
+    const row = rows[idx];
+    const move = i => { e.preventDefault(); this._moveFocus(i); };
 
-    // ← / → — collapse/expand folder (or navigate to parent)
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      if (this._focusIdx < 0) return;
-      const row = rows[this._focusIdx];
-      if (!row) return;
-      if (row.type === 'folder') {
-        const path = row.item.path;
-        if (e.key === 'ArrowRight') {
-          // Expand
-          if (this._collapsed.has(path)) {
-            this._collapsed.delete(path);
-            Persist.schedule();
-            this.invalidate();
-            this.render();
-          }
-        } else {
-          // Collapse
-          if (!this._collapsed.has(path) && row.item.lvl > 0) {
-            this._collapsed.add(path);
-            Persist.schedule();
-            this.invalidate();
-            this.render();
-          } else {
-            // Navigate to parent folder
-            const parentPath = this._parentFolderPath(path);
-            if (parentPath) {
-              const parentIdx = rows.findIndex(r => r.item.path === parentPath);
-              if (parentIdx >= 0) {
-                this._focusIdx = parentIdx;
-                this._scrollToIdx(parentIdx);
-                this.invalidate();
-                this.render();
-              }
-            }
-          }
+    switch (e.key) {
+      case 'ArrowDown':
+        return move(idx < 0 ? 0 : Math.min(rows.length - 1, idx + 1));
+      case 'ArrowUp':
+        return move(idx < 0 ? rows.length - 1 : Math.max(0, idx - 1));
+      case 'Home':
+        return move(0);
+      case 'End':
+        return move(rows.length - 1);
+
+      case 'ArrowRight':
+        e.preventDefault();
+        if (row?.type !== 'folder') return;
+        if (this._collapsed.has(row.item.path)) this._setCollapsed(row.item.path, false);
+        else if (rows[idx + 1] && rows[idx + 1].depth > row.depth) this._moveFocus(idx + 1);
+        return;
+
+      case 'ArrowLeft':
+        e.preventDefault();
+        if (!row) return;
+        if (row.type === 'folder' && row.item.lvl > 0 && !this._collapsed.has(row.item.path)) {
+          this._setCollapsed(row.item.path, true);
+        } else if (this._parentIdx(idx) >= 0) {
+          this._moveFocus(this._parentIdx(idx));
         }
-      }
-      return;
-    }
+        return;
 
-    // Space — toggle focused file selection / folder state
-    if (e.key === ' ') {
-      e.preventDefault();
-      if (this._focusIdx < 0) return;
-      const row = rows[this._focusIdx];
-      if (!row) return;
-      if (row.type === 'file') {
-        this._lastClickIdx    = this._focusIdx;
-        this._lastClickSelect = !State.selectedFiles.has(row.item.path);
-        this._toggleFile(row.item.path, null);
-      } else if (row.type === 'folder') {
-        this._cycleFolderState(row.item.path);
-      }
-      return;
-    }
+      case ' ':
+        e.preventDefault();
+        if (!row) return;
+        if (row.type === 'file') this._toggleFocusedFile(idx, row);
+        else this._cycleFolderState(row.item.path);
+        return;
 
-    // Enter — toggle folder collapse / toggle file selection
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (this._focusIdx < 0) return;
-      const row = rows[this._focusIdx];
-      if (!row) return;
-      if (row.type === 'folder') {
-        this._toggleCollapse(row.item.path);
-      } else if (row.type === 'file') {
-        this._lastClickIdx    = this._focusIdx;
-        this._lastClickSelect = !State.selectedFiles.has(row.item.path);
-        this._toggleFile(row.item.path, null);
-      }
+      case 'Enter':
+        e.preventDefault();
+        if (!row) return;
+        if (row.type === 'folder') this._toggleCollapse(row.item.path);
+        else this._toggleFocusedFile(idx, row);
     }
+  },
+
+  // Arrow, Space and Enter belong to the tree only while it has focus (or nothing does),
+  // otherwise they would hijack buttons elsewhere on the page.
+  _ownsNavigationKeys() {
+    const active = document.activeElement;
+    return !active || active === document.body || this._container.contains(active);
+  },
+
+  _onTreeFocus() {
+    if (this._focusIdx >= 0 || this._flatRows.length === 0) return;
+    let keyboard = true;
+    try { keyboard = this._container.matches(':focus-visible'); } catch { /* selector unsupported */ }
+    if (!keyboard) return;
+    this._focusIdx = 0;
+    this.render();
+  },
+
+  _moveFocus(idx) {
+    this._focusIdx = idx;
+    this._scrollToIdx(idx);
+    this.invalidate();
+    this.render();
+  },
+
+  _parentIdx(idx) {
+    const depth = this._flatRows[idx]?.depth;
+    for (let i = idx - 1; i >= 0 && depth > 0; i--) {
+      if (this._flatRows[i].depth < depth) return i;
+    }
+    return -1;
+  },
+
+  _toggleFocusedFile(idx, row) {
+    this._lastClickIdx    = idx;
+    this._lastClickSelect = !State.selectedFiles.has(row.item.path);
+    this._toggleFile(row.item.path, null);
+  },
+
+  _nameOf(path) {
+    return this._flatRows.find(r => r.item.path === path)?.item.name || path;
+  },
+
+  _announce(message) {
+    const el = document.getElementById('tree-live');
+    if (el) el.textContent = message;
   },
 
   // Scrolls container so the row at the given index is visible
@@ -676,8 +728,13 @@ const Tree = {
 
   /* ── Folder actions ────────────────────────────────────── */
   _toggleCollapse(path) {
-    if (this._collapsed.has(path)) this._collapsed.delete(path);
-    else this._collapsed.add(path);
+    this._setCollapsed(path, !this._collapsed.has(path));
+  },
+
+  _setCollapsed(path, collapsed) {
+    if (collapsed) this._collapsed.add(path);
+    else this._collapsed.delete(path);
+    this._announce(`${this._nameOf(path)} ${collapsed ? 'collapsed' : 'expanded'}`);
     Persist.schedule();
     this.invalidate(); this.render();
   },
@@ -690,6 +747,7 @@ const Tree = {
       ? 'skip'
       : states[(states.indexOf(cur) + 1) % 3];
     State.folderStates[path] = next;
+    this._announce(`${this._nameOf(path)}: ${STATE_SPOKEN[next]}`);
     this._syncFilesForFolder(path, next);
     // Propagate change upward
     const parent = this._parentFolderPath(path);
@@ -707,6 +765,7 @@ const Tree = {
 
     if (was) State.selectedFiles.delete(path);
     else     State.selectedFiles.add(path);
+    this._announce(`${this._nameOf(path)} ${was ? 'excluded' : 'included'}`);
 
     // Recompute parent folder state
     if (parentPath) {
@@ -725,7 +784,7 @@ const Tree = {
       if (cb)     { cb.className = was ? 'fcb off' : 'fcb on'; cb.innerHTML = was ? '' : IC.check; }
       if (nameEl)   nameEl.className = was ? 'row-name muted strike' : 'row-name';
       const stateEl = rowEl.querySelector('.row-state');
-      if (stateEl)  stateEl.innerHTML = was ? '<span class="row-excluded-x">✕</span>' : '';
+      if (stateEl)  stateEl.innerHTML = was ? '<span class="row-excluded-x" aria-hidden="true">✕</span>' : '';
       const isFocused = rowEl.classList.contains('row-focused');
       rowEl.className = (was ? 'row row-excluded' : 'row') + (isFocused ? ' row-focused' : '');
       rowEl.style.opacity = was ? '.5' : '';

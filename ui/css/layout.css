@@ -289,6 +289,8 @@ html {
 .row.row-folder:hover  { background: #f8f6f2; }
 .row.row-dimmed        { opacity: .32; }
 .row.row-focused       { outline: 2px solid var(--accent, #6c8ebf); outline-offset: -2px; z-index: 1; }
+.tree:focus-visible    { outline: none; border-radius: 0; }
+.tree:not(:focus-within) .row.row-focused { outline-color: var(--text3); }
 .row.row-excluded      { background: #dedad2; border-bottom: 1px solid #ccc9c0; position: relative; }
 .row.row-excluded::after {
   content: '';
