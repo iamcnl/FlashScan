@@ -55,6 +55,7 @@ FlashScan is a Windows desktop utility for scanning disks and folders and export
 - **Context Menu**: Right-click any file or folder for quick actions — Open, Show in Explorer, Copy Path, Copy Name, and Properties.
 - **Keyboard Shortcuts**: Full keyboard navigation for power users (see [Keyboard Shortcuts](#keyboard-shortcuts)).
 - **Persistent Settings**: Remembers your last used paths, theme, sorting, and scan options between sessions.
+- **Date Format**: The gear icon in the title bar sets how dates appear in the file list and in exports. It follows your system's regional format by default, with `dd. mm. yyyy`, `mm/dd/yyyy` and `yyyy-mm-dd` as alternatives.
 - **Drive Memory**: Remembers folder notes, folder states (name only / skip), excluded files, and expanded folders for each drive, so rescanning a flash drive restores your selection even if its drive letter changes.
 
 ---

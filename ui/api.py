@@ -417,6 +417,7 @@ class API:
 
         The scanned tree stays in Python (see scan()); the UI sends only the selection:
         params: { scan_id, formats, output_dir, custom_names, include_size, include_date,
+                  date_pattern (strftime layout of %d %m %Y; invalid values fall back to the default),
                   selection: { all_except | only: [file paths],
                                folder_states: {path: state} (folders that are not "full"),
                                folder_notes, active_exts: [ext] | null } }
@@ -468,6 +469,7 @@ class API:
         formats      = params.get("formats", [])
         include_size = params.get("include_size", True)
         include_date = params.get("include_date", True)
+        date_pattern = exporter.normalize_date_pattern(params.get("date_pattern"))
         custom_names = params.get("custom_names", {})
         folder_notes = selection.get("folder_notes", {})
         raw_exts     = selection.get("active_exts")
@@ -478,7 +480,7 @@ class API:
             tree, selection.get("folder_states", {}),
             self._selected_files(tree, selection), active_exts,
         ))
-        meta = self._build_meta(items, scan)
+        meta = self._build_meta(items, scan, date_pattern)
 
         total       = len(items)
         valid       = [f for f in formats if f in exporter.WRITERS]
@@ -515,7 +517,7 @@ class API:
                 tmp_file = out_file.with_name(out_file.name + ".part")
                 with open(tmp_file, "w", encoding="utf-8") as fh:
                     writer(fh, items, meta, include_size=include_size, include_date=include_date,
-                           folder_notes=folder_notes, progress=report)
+                           date_pattern=date_pattern, folder_notes=folder_notes, progress=report)
                 os.replace(tmp_file, out_file)
             except Exception as e:
                 log.exception("Export failed: format=%s target=%s", fmt, out_file or target)
@@ -557,7 +559,7 @@ class API:
         all_files = {item["path"] for item in tree if item["type"] == "file"}
         return all_files.difference(selection.get("all_except", ()))
 
-    def _build_meta(self, items: list, scan: dict) -> dict:
+    def _build_meta(self, items: list, scan: dict, date_pattern: str) -> dict:
         import exporter  # lazy
         path = scan["path"]
         volume_label = scan["volume_label"]
@@ -586,7 +588,7 @@ class API:
             "disk_name":        disk_name,
             "volume_label":     volume_label,
             "path":             path,
-            "timestamp":        datetime.now().strftime("%d. %m. %Y %H:%M"),
+            "timestamp":        datetime.now().strftime(f"{date_pattern} %H:%M"),
             "file_count":       file_count,
             "folder_count":     folder_count,
             "total_size":       exporter.fmt_size(total),

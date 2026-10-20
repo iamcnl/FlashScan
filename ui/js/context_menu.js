@@ -226,9 +226,7 @@ const ContextMenu = (() => {
           ? (itm.size / 1024).toFixed(1) + ' KB'
           : (itm.size / 1048576).toFixed(2) + ' MB')
       : '—';
-    const date = itm.mtime
-      ? new Date(itm.mtime * 1000).toLocaleDateString('en-US')
-      : '—';
+    const date = DateFmt.format(itm.mtime) || '—';
     _toast(`${itm.name}  •  ${size}  •  ${date}`);
   }
 

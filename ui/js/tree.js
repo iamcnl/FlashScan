@@ -45,9 +45,7 @@ function fmtSize(b) {
   return `${(b/1073741824).toFixed(2)} GB`;
 }
 function fmtDate(ts) {
-  if (!ts) return '';
-  return new Date(ts * 1000).toLocaleDateString('en-US',
-    { day:'2-digit', month:'2-digit', year:'numeric' });
+  return DateFmt.format(ts);
 }
 function fileIcon(name) {
   const dot = name.lastIndexOf('.');

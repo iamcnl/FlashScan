@@ -637,8 +637,7 @@ const AdvFilter = {
     const hint = document.getElementById('adv-cal-hint');
     if (!hint) return;
     if (this._calStep === 0 && this._calFrom && this._calTo) {
-      const fmt = d => d.toLocaleDateString('en-US', { day:'numeric', month:'numeric', year:'numeric' });
-      hint.textContent = `${fmt(this._calFrom)} – ${fmt(this._calTo)}`;
+      hint.textContent = `${DateFmt.formatDate(this._calFrom)} – ${DateFmt.formatDate(this._calTo)}`;
     } else if (this._calStep === 1) {
       hint.textContent = 'Select end date';
     } else {

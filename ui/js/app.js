@@ -104,6 +104,14 @@ function initFmtGrid() {
   });
 }
 
+/* ── Modal helpers ── */
+function modalEl(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
 /* ── Confirm dialog ── */
 const ConfirmDialog = {
   _open: false,
@@ -112,32 +120,25 @@ const ConfirmDialog = {
     if (this._open) return Promise.resolve(false);
     this._open = true;
 
-    const el = (tag, className, text) => {
-      const node = document.createElement(tag);
-      if (className) node.className = className;
-      if (text !== undefined) node.textContent = text;
-      return node;
-    };
-
-    const backdrop = el('div', 'modal-backdrop');
-    const dialog   = el('div', 'modal');
+    const backdrop = modalEl('div', 'modal-backdrop');
+    const dialog   = modalEl('div', 'modal');
     dialog.setAttribute('role', 'alertdialog');
     dialog.setAttribute('aria-modal', 'true');
     dialog.setAttribute('aria-labelledby', 'modal-title');
     dialog.setAttribute('aria-describedby', 'modal-desc');
 
-    const heading = el('h2', 'modal-title', title);
+    const heading = modalEl('h2', 'modal-title', title);
     heading.id = 'modal-title';
-    const desc = el('p', 'modal-text', intro);
+    const desc = modalEl('p', 'modal-text', intro);
     desc.id = 'modal-desc';
-    const list = el('ul', 'modal-list');
-    items.forEach(text => list.append(el('li', '', text)));
-    const noteEl = el('p', 'modal-note', note);
+    const list = modalEl('ul', 'modal-list');
+    items.forEach(text => list.append(modalEl('li', '', text)));
+    const noteEl = modalEl('p', 'modal-note', note);
 
-    const cancel  = el('button', 'btn btn-secondary', cancelLabel);
-    const confirm = el('button', 'btn btn-danger', confirmLabel);
+    const cancel  = modalEl('button', 'btn btn-secondary', cancelLabel);
+    const confirm = modalEl('button', 'btn btn-danger', confirmLabel);
     cancel.type = confirm.type = 'button';
-    const actions = el('div', 'modal-actions');
+    const actions = modalEl('div', 'modal-actions');
     actions.append(cancel, confirm);
 
     dialog.append(heading, desc, list, noteEl, actions);
@@ -173,6 +174,86 @@ const ConfirmDialog = {
     });
   },
 };
+
+/* ── Settings dialog ── */
+const SettingsDialog = {
+  _open: false,
+
+  open() {
+    if (this._open || ConfirmDialog._open) return;
+    this._open = true;
+
+    const backdrop = modalEl('div', 'modal-backdrop');
+    const dialog   = modalEl('div', 'modal');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'settings-title');
+
+    const heading = modalEl('h2', 'modal-title', 'Settings');
+    heading.id = 'settings-title';
+
+    const select = modalEl('select', 'adv-select');
+    select.id = 'settings-date-format';
+    DateFmt.OPTIONS.forEach(({ value, label }) => {
+      const option = modalEl('option', '', label);
+      option.value = value;
+      select.append(option);
+    });
+    select.value = DateFmt.mode;
+    const label = modalEl('label', '', 'Date format');
+    label.htmlFor = select.id;
+    const field = modalEl('div', 'modal-field');
+    field.append(label, select);
+
+    const preview = modalEl('p', 'modal-text');
+    const showPreview = () => {
+      preview.textContent = `Example: ${DateFmt.formatDate(new Date())}. Used in the file list and in exported files.`;
+    };
+    showPreview();
+
+    const close   = modalEl('button', 'btn btn-secondary', 'Close');
+    close.type = 'button';
+    const actions = modalEl('div', 'modal-actions');
+    actions.append(close);
+
+    dialog.append(heading, field, preview, actions);
+    backdrop.append(dialog);
+
+    const previousFocus = document.activeElement;
+    document.body.append(backdrop);
+    select.focus();
+
+    const finish = () => {
+      window.removeEventListener('keydown', onKey, true);
+      backdrop.remove();
+      this._open = false;
+      previousFocus?.focus?.();
+    };
+    // Capture phase on window: the tree's shortcuts must not fire behind the dialog.
+    const onKey = e => {
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finish();
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        (document.activeElement === select ? close : select).focus();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    close.addEventListener('click', finish);
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) finish(); });
+    select.addEventListener('change', () => {
+      DateFmt.setMode(select.value);
+      State.settings.dateFormat = DateFmt.mode;
+      window.pywebview?.api?.save_settings({ dateFormat: DateFmt.mode });
+      showPreview();
+      if (State.treeData?.length) Tree.render();
+    });
+  },
+};
+
+document.getElementById('btn-open-settings')?.addEventListener('click', () => SettingsDialog.open());
 
 /* ── Drive profile note (status bar) ── */
 /* ── Scan issues banner: unreadable entries and the depth limit ── */
@@ -508,6 +589,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (settings) {
       State.settings = { ...State.settings, ...settings };
       Theme.set(settings.theme === 'dark' ? 'dark' : 'light');
+      DateFmt.setMode(settings.dateFormat);
       setCheckbox('cb-hidden', settings.inclHidden);
       setCheckbox('cb-system', settings.inclSystem);
       Export.applyOptions(settings);

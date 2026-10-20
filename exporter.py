@@ -31,10 +31,22 @@ def fmt_size(b: int) -> str:
     return f"{b/_GB:.2f} GB"
 
 
-def fmt_date(ts: float) -> str:
+DEFAULT_DATE_PATTERN = "%d. %m. %Y"
+_DATE_PATTERN = re.compile(r"(?:%[dmY]|[^%\x00-\x1f]){3,32}")
+
+
+def normalize_date_pattern(pattern) -> str:
+    """Returns pattern if it is a plain day/month/year layout, else the default."""
+    if (isinstance(pattern, str) and _DATE_PATTERN.fullmatch(pattern)
+            and all(pattern.count(d) == 1 for d in ("%d", "%m", "%Y"))):
+        return pattern
+    return DEFAULT_DATE_PATTERN
+
+
+def fmt_date(ts: float, pattern: str = DEFAULT_DATE_PATTERN) -> str:
     if not ts:
         return ""
-    return datetime.fromtimestamp(ts).strftime("%d. %m. %Y")
+    return datetime.fromtimestamp(ts).strftime(pattern)
 
 
 def _esc(s: str) -> str:
@@ -137,7 +149,7 @@ def iter_export(tree: list, folder_states: dict, selected_files: set,
 # ── Markdown ──────────────────────────────────────────────────────
 
 def write_md(out, items: list, meta, *, include_size=True, include_date=True,
-             folder_notes=None, progress=None) -> None:
+             date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
     folder_notes = folder_notes or {}
     label = meta.get('volume_label', '')
     title = _md_esc(f"{label} ({meta['disk_name']})" if label else meta['disk_name'])
@@ -164,7 +176,7 @@ def write_md(out, items: list, meta, *, include_size=True, include_date=True,
                 emit(f"{indent}- **{name}/{suffix}**{note_inline}")
         else:
             sz = f" · {fmt_size(size)}" if (include_size and size) else ""
-            dt = f" · {fmt_date(mtime)}" if (include_date and mtime) else ""
+            dt = f" · {fmt_date(mtime, date_pattern)}" if (include_date and mtime) else ""
             emit(f"{indent}- {name}{sz}{dt}")
         if progress and n % PROGRESS_EVERY == 0:
             progress(n)
@@ -175,7 +187,7 @@ def write_md(out, items: list, meta, *, include_size=True, include_date=True,
 # ── TXT ──────────────────────────────────────────────────────────
 
 def write_txt(out, items: list, meta, *, include_size=True, include_date=True,
-              folder_notes=None, progress=None) -> None:
+              date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
     folder_notes = folder_notes or {}
     label = meta.get('volume_label', '')
     title = f"{label} ({meta['disk_name']})" if label else meta['disk_name']
@@ -198,7 +210,7 @@ def write_txt(out, items: list, meta, *, include_size=True, include_date=True,
                 emit(f"{indent}  > {note}")
         else:
             sz = f"  {fmt_size(size):<10}" if (include_size and size) else ""
-            dt = f"  {fmt_date(mtime)}" if (include_date and mtime) else ""
+            dt = f"  {fmt_date(mtime, date_pattern)}" if (include_date and mtime) else ""
             emit(f"{indent}  {name}{sz}{dt}")
         if progress and n % PROGRESS_EVERY == 0:
             progress(n)
@@ -209,7 +221,7 @@ def write_txt(out, items: list, meta, *, include_size=True, include_date=True,
 # ── JSON ─────────────────────────────────────────────────────────
 
 def write_json(out, items: list, meta, *, include_size=True, include_date=True,
-               folder_notes=None, progress=None) -> None:
+               date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
     """Streams the same text as json.dumps({"meta": ..., "folders": [...]}, indent=2)."""
     folder_notes = folder_notes or {}
     wrote_folder = False
@@ -244,7 +256,7 @@ def write_json(out, items: list, meta, *, include_size=True, include_date=True,
                 file_entry["size"]     = size
                 file_entry["size_fmt"] = fmt_size(size)
             if include_date:
-                file_entry["date"] = fmt_date(mtime)
+                file_entry["date"] = fmt_date(mtime, date_pattern)
             entry["files"].append(file_entry)
         if progress and n % PROGRESS_EVERY == 0:
             progress(n)
@@ -301,7 +313,7 @@ _NOTE_ICON_SVG = (
 # ── HTML ─────────────────────────────────────────────────────────
 
 def write_html(out, items: list, meta, *, include_size=True, include_date=True,
-               folder_notes=None, progress=None) -> None:
+               date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
     folder_notes = folder_notes or {}
     css_tokens = _load_export_css()
     emit = _Lines(out).add
@@ -422,7 +434,7 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
                 close_until(lvl)
                 ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
                 sz_str = fmt_size(size) if (include_size and size) else ""
-                dt_str = _esc(fmt_date(mtime)) if (include_date and mtime) else ""
+                dt_str = _esc(fmt_date(mtime, date_pattern)) if (include_date and mtime) else ""
                 ename = _esc(name)
                 root_cls = " fi-root" if not open_levels else ""
                 emit(

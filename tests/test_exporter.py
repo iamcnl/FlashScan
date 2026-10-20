@@ -111,6 +111,27 @@ def test_fmt_date():
     assert exporter.fmt_date(0) == ""
 
 
+def test_fmt_date_uses_the_given_pattern():
+    assert exporter.fmt_date(STAMP, "%Y-%m-%d") == "2024-03-05"
+    assert exporter.fmt_date(STAMP, "%m/%d/%Y") == "03/05/2024"
+    assert exporter.fmt_date(0, "%Y-%m-%d") == ""
+
+
+@pytest.mark.parametrize("pattern", [
+    "%d. %m. %Y", "%m/%d/%Y", "%Y-%m-%d", "%Y. %m. %d.", "%d.%m.%Y",
+])
+def test_normalize_date_pattern_keeps_day_month_year_layouts(pattern):
+    assert exporter.normalize_date_pattern(pattern) == pattern
+
+
+@pytest.mark.parametrize("pattern", [
+    None, 5, "", "%d", "%d %m", "%d %m %Y %H", "%d %m %Y %Y",
+    "%%d %m %Y", "%d %m %Y%", "%d %m %Y\n", "%c", "x" * 40,
+])
+def test_normalize_date_pattern_falls_back_to_the_default(pattern):
+    assert exporter.normalize_date_pattern(pattern) == exporter.DEFAULT_DATE_PATTERN
+
+
 def test_esc_escapes_everything_that_can_break_html():
     assert exporter._esc("<a href=\"x\" onclick='y'>&") == (
         "&lt;a href=&quot;x&quot; onclick=&#x27;y&#x27;&gt;&amp;"
@@ -824,6 +845,14 @@ def test_every_writer_reports_progress_in_steps_and_finishes_at_the_total(fmt):
 @pytest.mark.parametrize("fmt", sorted(exporter.WRITERS))
 def test_every_writer_works_without_a_progress_callback(fmt):
     assert render(exporter.WRITERS[fmt], GOLDEN_ITEMS, progress=None)
+
+
+@pytest.mark.parametrize("fmt", sorted(exporter.WRITERS))
+def test_every_writer_formats_dates_with_the_given_pattern(fmt):
+    out = render(exporter.WRITERS[fmt], export(make_tree("a.txt")), date_pattern="%m/%d/%Y")
+
+    assert "03/05/2024" in out
+    assert DATE not in out
 
 
 def test_txt_writer_keeps_unicode_and_punctuation_names():

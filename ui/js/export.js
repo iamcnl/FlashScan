@@ -222,6 +222,7 @@ const Export = {
         selection:    State.selectionDelta(),
         include_size: adv.include_size,
         include_date: adv.include_date,
+        date_pattern: DateFmt.pattern(),
         custom_names: this._customNames(),
       });
 

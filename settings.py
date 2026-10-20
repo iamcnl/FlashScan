@@ -31,6 +31,7 @@ DEFAULTS: dict = {
     "customExts":  [],
     "exportIncludeSize": True,
     "exportIncludeDate": True,
+    "dateFormat":  "system",
     "theme":       "light",
     "sortCol":     "name",
     "sortDir":     "asc",
