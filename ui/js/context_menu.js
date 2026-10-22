@@ -126,7 +126,7 @@ const ContextMenu = (() => {
 
     switch (action) {
       case 'open':
-        api ? api.open_path(_curPath) : console.log('[ctx] open_path:', _curPath);
+        api ? _openPath(api, _curPath) : console.log('[ctx] open_path:', _curPath);
         break;
 
       case 'explorer':
@@ -230,6 +230,19 @@ const ContextMenu = (() => {
   }
 
   /* ── Toast ───────────────────────────────────────────────── */
+  async function _openPath(api, path) {
+    const result = await api.open_path(path);
+    if (!result?.confirm) return;
+    const confirmed = await ConfirmDialog.show({
+      title: 'Open this file?',
+      intro: `"${result.name}" can run code on this computer when opened.`,
+      note: 'Only open it if you trust where it came from.',
+      confirmLabel: 'Open',
+      cancelLabel: 'Cancel',
+    });
+    if (confirmed) api.open_path(path, true);
+  }
+
   function _toast(msg) {
     let t = document.getElementById('ctx-toast');
     if (!t) {

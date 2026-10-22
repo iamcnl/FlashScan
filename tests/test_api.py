@@ -313,6 +313,54 @@ def test_open_path_returns_launcher_failures_as_errors(app, tmp_path, monkeypatc
     assert app.open_path(str(target)) == {"error": "no application is associated with this file"}
 
 
+@pytest.mark.parametrize("name", [
+    "setup.exe", "RUN.BAT", "script.ps1", "shortcut.lnk", "installer.msi",
+])
+def test_opening_a_launchable_file_asks_for_confirmation_first(app, tmp_path, monkeypatch, name):
+    opened = []
+    monkeypatch.setattr(api.os, "startfile", opened.append, raising=False)
+    target = tmp_path / name
+    target.write_text("x")
+    app._trust_root(str(tmp_path))
+
+    assert app.open_path(str(target)) == {"confirm": True, "name": target.name}
+    assert opened == []
+
+    assert app.open_path(str(target), True) == {"ok": True}
+    assert opened == [str(target)]
+
+
+@pytest.mark.parametrize("name", ["setup.exe.", "setup.exe ", "setup.exe. .", "SETUP.EXE"])
+def test_trailing_dots_and_spaces_do_not_hide_a_launchable_extension(monkeypatch, name):
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+
+    assert api._launches_code(Path(name))
+
+
+def test_opening_other_files_and_folders_needs_no_confirmation(app, tmp_path, monkeypatch):
+    opened = []
+    monkeypatch.setattr(api.os, "startfile", opened.append, raising=False)
+    document = tmp_path / "notes.txt"
+    document.write_text("x")
+    folder = tmp_path / "setup.exe.d"
+    folder.mkdir()
+    lookalike = tmp_path / "setup.exe"
+    lookalike.mkdir()
+    app._trust_root(str(tmp_path))
+
+    for target in (document, folder, lookalike):
+        assert app.open_path(str(target)) == {"ok": True}
+    assert opened == [str(document), str(folder), str(lookalike)]
+
+
+def test_untrusted_launchable_files_are_still_denied_without_a_prompt(app, tmp_path):
+    target = tmp_path / "setup.exe"
+    target.write_text("x")
+
+    assert app.open_path(str(target)) == api._DENIED
+    assert app.open_path(str(target), True) == api._DENIED
+
+
 @pytest.mark.parametrize("as_folder", [False, True])
 def test_reveal_selects_the_item_in_explorer(app, tmp_path, popen, as_folder):
     folder = tmp_path / "docs"

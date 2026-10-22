@@ -38,6 +38,17 @@ MAX_LOGGED_LINKS = 20
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _DENIED = {"error": "Path is outside the scanned folders."}
 _EXPORT_EXTS = {"MD": ".md", "TXT": ".txt", "JSON": ".json", "HTML": ".html"}
+_LAUNCHABLE_EXTS = frozenset({
+    ".exe", ".com", ".scr", ".pif", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".js", ".jse",
+    ".wsf", ".wsh", ".hta", ".msi", ".msp", ".msix", ".appx", ".application", ".lnk",
+    ".url", ".reg", ".cpl", ".inf", ".scf", ".jar", ".gadget",
+})
+
+
+def _launches_code(path: Path) -> bool:
+    # Windows ignores trailing dots and spaces, so "setup.exe." still runs as setup.exe
+    extension = os.path.splitext(path.name.rstrip(" ."))[1].lower()
+    return path.is_file() and extension in _LAUNCHABLE_EXTS
 
 
 def _reserve_unique(path: Path) -> Path:
@@ -183,14 +194,21 @@ class API:
 
     # ── File / folder operations ──────────────────────────────────
 
-    def open_path(self, path: str) -> dict:
-        """Opens a file or folder with the OS default application."""
+    def open_path(self, path: str, confirmed: bool = False) -> dict:
+        """
+        Opens a file or folder with the OS default application.
+
+        Files that run code when opened are not launched until the caller repeats the
+        request with confirmed=True; until then the result is {"confirm": True, "name": ...}.
+        """
         try:
             if not self._is_trusted(path):
                 return _DENIED
             p = Path(path)
             if not p.exists():
                 return {"error": "Path does not exist."}
+            if not confirmed and _launches_code(p):
+                return {"confirm": True, "name": p.name}
             os.startfile(str(p))
             return {"ok": True}
         except Exception as e:
