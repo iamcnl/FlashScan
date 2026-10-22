@@ -49,15 +49,15 @@ def no_volume_lookup(monkeypatch):
 
 @pytest.fixture
 def unreadable_file(monkeypatch):
-    real_lstat = os.lstat
+    real_lstat = scanner._lstat
     denied = set()
 
-    def lstat(path, *args, **kwargs):
-        if os.path.basename(os.fspath(path)) in denied:
-            raise PermissionError(13, "Permission denied", os.fspath(path))
-        return real_lstat(path, *args, **kwargs)
+    def lstat(entry):
+        if entry.name in denied:
+            raise PermissionError(13, "Permission denied", entry.path)
+        return real_lstat(entry)
 
-    monkeypatch.setattr(os, "lstat", lstat)
+    monkeypatch.setattr(scanner, "_lstat", lstat)
     return denied.add
 
 
@@ -261,7 +261,7 @@ def test_incl_system_keeps_windows_system_folders(root):
 @pytest.fixture
 def win_attrs(monkeypatch):
     attrs = {"secret.txt": 0x2, "sys.txt": 0x4, "hid_dir": 0x2}
-    monkeypatch.setattr(scanner, "_win_attrs", lambda p: attrs.get(os.path.basename(p), 0))
+    monkeypatch.setattr(scanner, "_file_attributes", lambda entry, st: attrs.get(entry.name, 0))
 
 
 def test_hidden_attribute_hides_files(root, win_attrs):
@@ -292,6 +292,43 @@ def test_hidden_attribute_skips_a_folder_and_its_contents(root, win_attrs):
     assert names(r, "folder") == ["drive"]
     assert names(r, "file") == ["normal.txt"]
     assert r["skipped"] == 1
+
+
+def test_attributes_come_from_the_listing_stat(root, monkeypatch):
+    build(root, {"secret.txt": 3, "sys.txt": 3, "normal.txt": 3})
+    real_lstat = scanner._lstat
+    flags = {"secret.txt": stat.FILE_ATTRIBUTE_HIDDEN, "sys.txt": stat.FILE_ATTRIBUTE_SYSTEM}
+
+    def lstat(entry):
+        st = real_lstat(entry)
+        return types.SimpleNamespace(
+            st_mode=st.st_mode, st_size=st.st_size, st_mtime=st.st_mtime,
+            st_file_attributes=flags.get(entry.name, 0),
+        )
+
+    monkeypatch.setattr(scanner, "_lstat", lstat)
+
+    assert names(scan(root), "file") == ["normal.txt"]
+    assert names(scan(root, incl_hidden=True, incl_system=True), "file") == [
+        "normal.txt", "secret.txt", "sys.txt",
+    ]
+
+
+def test_missing_attributes_mean_no_flags():
+    assert scanner._file_attributes(None, types.SimpleNamespace()) == 0
+
+
+def test_files_are_never_stat_ed_individually(root, monkeypatch):
+    build(root, {"a.txt": 1, "sub/b.txt": 1})
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("per-file stat call")
+
+    monkeypatch.setattr(os, "lstat", forbidden)
+    monkeypatch.setattr(pathlib.Path, "stat", forbidden)
+    r = scan(root)
+
+    assert names(r, "file") == ["a.txt", "b.txt"]
 
 
 # ── Progress and cancellation ────────────────────────────────────
@@ -398,14 +435,14 @@ def test_unreadable_folder_past_the_depth_limit_is_not_reported(root, locked_fol
 
 def test_unreadable_folder_date_is_reported_and_zeroed(root, monkeypatch):
     build(root, {"weird/x.txt": 1})
-    real_stat = pathlib.Path.stat
+    real_lstat = scanner._lstat
 
-    def stat(self, *args, **kwargs):
-        if self.name == "weird":
+    def lstat(entry):
+        if entry.name == "weird":
             raise OSError(5, "Input/output error")
-        return real_stat(self, *args, **kwargs)
+        return real_lstat(entry)
 
-    monkeypatch.setattr(pathlib.Path, "stat", stat)
+    monkeypatch.setattr(scanner, "_lstat", lstat)
     r = scan(root)
 
     assert item(r, "weird")["mtime"] == 0
@@ -540,17 +577,17 @@ def test_link_target_is_empty_when_it_cannot_be_read(monkeypatch):
 
 def test_junction_is_skipped_like_a_symlink(root, monkeypatch):
     build(root, {"real/inner.txt": 1, "junction/inner.txt": 1})
-    real_lstat = os.lstat
+    real_lstat = scanner._lstat
 
-    def lstat(path, *args, **kwargs):
-        st = real_lstat(path, *args, **kwargs)
-        if os.path.basename(os.fspath(path)) == "junction":
+    def lstat(entry):
+        st = real_lstat(entry)
+        if entry.name == "junction":
             return types.SimpleNamespace(
                 st_mode=st.st_mode, st_reparse_tag=scanner.IO_REPARSE_TAG_MOUNT_POINT
             )
         return st
 
-    monkeypatch.setattr(os, "lstat", lstat)
+    monkeypatch.setattr(scanner, "_lstat", lstat)
     r = scan(root)
 
     assert names(r, "folder") == ["drive", "real"]

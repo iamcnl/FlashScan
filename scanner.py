@@ -7,6 +7,7 @@ Returns a flat list of dict items compatible with JS State.reset().
 
 from __future__ import annotations
 
+import operator
 import os
 import stat
 import subprocess
@@ -24,33 +25,6 @@ WIN_SYSTEM_DIRS = {
     "$recycle.bin", "system volume information", "$windows.~bt",
     "$windows.~ws", "recovery", "boot", "bootmgr",
 }
-
-
-# ── Windows attributes ────────────────────────────────────────────
-
-def _win_attrs(path: str) -> int:
-    if not _HAS_CTYPES:
-        return 0
-    try:
-        attrs = ctypes.windll.kernel32.GetFileAttributesW(path)
-        return 0 if attrs == -1 else attrs
-    except Exception:
-        return 0
-
-
-def is_hidden(path: Path) -> bool:
-    name = path.name
-    if name.startswith("."):
-        return True
-    if _HAS_CTYPES:
-        return bool(_win_attrs(str(path)) & 0x2)
-    return False
-
-
-def is_system(path: Path) -> bool:
-    if not _HAS_CTYPES:
-        return False
-    return bool(_win_attrs(str(path)) & 0x4)
 
 
 # ── Volume label ─────────────────────────────────────────────────
@@ -110,6 +84,8 @@ IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
 
 _IS_WINDOWS = os.name == "nt"
 
+_by_name = operator.attrgetter("name")
+
 
 def _reason(error: OSError) -> str:
     return error.strerror or type(error).__name__
@@ -117,6 +93,21 @@ def _reason(error: OSError) -> str:
 
 def _is_link(st: os.stat_result) -> bool:
     return stat.S_ISLNK(st.st_mode) or getattr(st, "st_reparse_tag", 0) == IO_REPARSE_TAG_MOUNT_POINT
+
+
+def _lstat(entry: os.DirEntry) -> os.stat_result:
+    return entry.stat(follow_symlinks=False)
+
+
+def _file_attributes(entry: os.DirEntry, st: os.stat_result) -> int:
+    return getattr(st, "st_file_attributes", 0)
+
+
+def _is_dir(entry: os.DirEntry) -> bool:
+    try:
+        return entry.is_dir()
+    except OSError:
+        return False
 
 
 def _link_target(path) -> str:
@@ -193,113 +184,109 @@ def scan_path(
         if len(links) < MAX_LINK_DETAILS:
             links.append({"path": str(path), "kind": kind, "target": _link_target(path)})
 
-    def on_walk_error(error: OSError) -> None:
-        path = str(error.filename) if error.filename else "?"
-        if path == str(root):
-            raise OSError(f"Cannot read {root}: {_reason(error)}") from error
-        note_unreadable(path, "folder", error)
+    hidden_bit = stat.FILE_ATTRIBUTE_HIDDEN
+    system_bit = stat.FILE_ATTRIBUTE_SYSTEM
+    parent_of: dict[int, int | None] = {}
+    stack = [(str(root), root.name, 0, None, None, None)]
 
-    path_to_idx: dict[str, int] = {}
-    for dirpath, dirs, files in os.walk(root, onerror=on_walk_error):
+    while stack:
         check_cancelled()
+        dirpath, folder_name, depth, parent_idx, dir_st, dir_err = stack.pop()
+
         try:
-            rel   = Path(dirpath).relative_to(root)
-            depth = len(rel.parts)
-        except ValueError:
-            depth = 0
-
-        # Filter subdirectories
-        filtered_dirs = []
-        for d in sorted(dirs):
-            dpath = Path(dirpath) / d
-            if not incl_system and d.lower() in WIN_SYSTEM_DIRS:
-                skipped += 1
-                continue
-            if not incl_hidden and is_hidden(dpath):
-                skipped += 1
-                continue
-            if not incl_system and is_system(dpath):
-                skipped += 1
-                continue
-            try:
-                dir_is_link = _is_link(os.lstat(dpath))
-            except OSError:
-                dir_is_link = False  # os.walk reports an unreadable folder itself
-            if dir_is_link:
-                note_link(dpath, "folder")
-                continue
-            filtered_dirs.append(d)
-
-        if depth >= max_depth:
-            beyond_depth += len(filtered_dirs)
-            dirs.clear()
-        else:
-            dirs[:] = filtered_dirs
-
-        folder_count += 1
-        folder_name = Path(dirpath).name or root.name
-
-        # Folder modification date from OS
-        try:
-            fst    = Path(dirpath).stat()
-            fmtime = fst.st_mtime
+            with os.scandir(dirpath) as it:
+                entries = sorted(it, key=_by_name)
         except OSError as e:
-            fmtime = 0
-            note_unreadable(dirpath, "date", e)
+            if parent_idx is None:
+                raise OSError(f"Cannot read {root}: {_reason(e)}") from e
+            note_unreadable(dirpath, "folder", e)
+            continue
 
+        if parent_idx is None:
+            try:
+                dir_st = os.stat(dirpath)
+            except OSError as e:
+                dir_err = e
+        if dir_st is not None:
+            fmtime = dir_st.st_mtime
+        else:
+            fmtime = 0
+            note_unreadable(dirpath, "date", dir_err)
+
+        folder_idx = len(tree)
         folder_entry = {
             "lvl":   depth,
             "type":  "folder",
             "name":  folder_name,
-            "path":  str(dirpath),
-            "size":  0,       # will be accumulated below
+            "path":  dirpath,
+            "size":  0,
             "mtime": fmtime,
         }
         tree.append(folder_entry)
-        path_to_idx[str(dirpath)] = len(tree) - 1
+        parent_of[folder_idx] = parent_idx
+        folder_count += 1
 
+        subdirs = []
         folder_size = 0
-        for fname in sorted(files):
+        for entry in entries:
             check_cancelled()
-            fpath = Path(dirpath) / fname
-            if not incl_hidden and is_hidden(fpath):
-                skipped += 1
-                continue
-            if not incl_system and is_system(fpath):
-                skipped += 1
-                continue
+            name = entry.name
             try:
-                st = os.lstat(fpath)
+                st, err = _lstat(entry), None
             except OSError as e:
-                note_unreadable(fpath, "file", e)
-                continue
-            if _is_link(st):
-                note_link(fpath, "file")
-                continue
-            size  = st.st_size
-            mtime = st.st_mtime
+                st, err = None, e
 
+            link = st is not None and _is_link(st)
+            if st is None or link:
+                is_dir = _is_dir(entry)
+            else:
+                is_dir = stat.S_ISDIR(st.st_mode)
+            attrs = _file_attributes(entry, st) if st is not None else 0
+
+            if is_dir and not incl_system and name.lower() in WIN_SYSTEM_DIRS:
+                skipped += 1
+                continue
+            if not incl_hidden and (name.startswith(".") or attrs & hidden_bit):
+                skipped += 1
+                continue
+            if not incl_system and attrs & system_bit:
+                skipped += 1
+                continue
+            if link:
+                note_link(entry.path, "folder" if is_dir else "file")
+                continue
+
+            if is_dir:
+                subdirs.append((entry.path, name, depth + 1, folder_idx, st, err))
+                continue
+            if st is None:
+                note_unreadable(entry.path, "file", err)
+                continue
+
+            size = st.st_size
             tree.append({
                 "lvl":   depth + 1,
                 "type":  "file",
-                "name":  fname,
-                "path":  str(fpath),
+                "name":  name,
+                "path":  entry.path,
                 "size":  size,
-                "mtime": mtime,
+                "mtime": st.st_mtime,
             })
             folder_size += size
             file_count += 1
             if progress_cb and file_count % 100 == 0:
                 progress_cb(file_count)
 
+        if depth >= max_depth:
+            beyond_depth += len(subdirs)
+        else:
+            stack.extend(reversed(subdirs))
+
         folder_entry["size"] = folder_size
-        # Add direct files of this folder to all ancestors
-        ancestor = Path(dirpath).parent
-        while ancestor != Path(dirpath) and str(ancestor) in path_to_idx:
-            tree[path_to_idx[str(ancestor)]]["size"] += folder_size
-            if ancestor == root:
-                break
-            ancestor = ancestor.parent
+        ancestor = parent_idx
+        while ancestor is not None:
+            tree[ancestor]["size"] += folder_size
+            ancestor = parent_of[ancestor]
 
     check_cancelled()
     volume = get_volume_info(root_path)
