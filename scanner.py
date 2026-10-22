@@ -7,18 +7,12 @@ Returns a flat list of dict items compatible with JS State.reset().
 
 from __future__ import annotations
 
+import ctypes
 import operator
 import os
 import stat
-import subprocess
 import threading
 from pathlib import Path
-
-try:
-    import ctypes
-    _HAS_CTYPES = True
-except ImportError:
-    _HAS_CTYPES = False
 
 # ── Windows system folders (skip if incl_system=False) ──
 WIN_SYSTEM_DIRS = {
@@ -33,32 +27,16 @@ def get_volume_info(path: str) -> dict:
     """Returns {'label': str, 'serial': int | None} for the drive that holds path."""
     label, serial = "", None
     try:
-        if _HAS_CTYPES and hasattr(ctypes, 'windll'):
-            # Windows: GetVolumeInformationW
-            root = str(Path(path).anchor)  # e.g. "D:\"
-            buf = ctypes.create_unicode_buffer(256)
-            serial_no = ctypes.c_uint32(0)
-            ok = ctypes.windll.kernel32.GetVolumeInformationW(
-                root, buf, len(buf),
-                ctypes.byref(serial_no), None, None, None, 0
-            )
-            if ok:
-                label = buf.value
-                serial = serial_no.value or None
-        else:
-            # macOS/Linux: try via diskutil or /proc/mounts
-            anchor = str(Path(path).anchor)
-            try:
-                out = subprocess.check_output(
-                    ["diskutil", "info", anchor],
-                    stderr=subprocess.DEVNULL, timeout=3
-                ).decode(errors="ignore")
-                for line in out.splitlines():
-                    if "Volume Name" in line:
-                        label = line.split(":", 1)[-1].strip()
-                        break
-            except Exception:
-                pass
+        root = str(Path(path).anchor)  # drive root, e.g. D:
+        buf = ctypes.create_unicode_buffer(256)
+        serial_no = ctypes.c_uint32(0)
+        ok = ctypes.windll.kernel32.GetVolumeInformationW(
+            root, buf, len(buf),
+            ctypes.byref(serial_no), None, None, None, 0
+        )
+        if ok:
+            label = buf.value
+            serial = serial_no.value or None
     except Exception:
         pass
     return {"label": label, "serial": serial}
@@ -81,8 +59,6 @@ MAX_UNREADABLE_DETAILS = 200
 MAX_LINK_DETAILS = 200
 
 IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
-
-_IS_WINDOWS = os.name == "nt"
 
 _by_name = operator.attrgetter("name")
 
@@ -115,11 +91,10 @@ def _link_target(path) -> str:
         target = os.readlink(path)
     except OSError:
         return ""
-    if _IS_WINDOWS:
-        if target.startswith("\\\\?\\UNC\\"):
-            return "\\\\" + target[8:]
-        if target.startswith("\\\\?\\"):
-            return target[4:]
+    if target.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + target[8:]
+    if target.startswith("\\\\?\\"):
+        return target[4:]
     return target
 
 

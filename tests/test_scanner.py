@@ -553,17 +553,9 @@ def test_is_link_recognises_symlinks_and_junctions_but_not_other_reparse_points(
     ("..\\real", "..\\real"),
 ])
 def test_link_targets_lose_the_windows_extended_path_prefix(monkeypatch, raw, expected):
-    monkeypatch.setattr(scanner, "_IS_WINDOWS", True)
     monkeypatch.setattr(os, "readlink", lambda path: raw)
 
     assert scanner._link_target("any") == expected
-
-
-def test_link_targets_are_left_alone_off_windows(monkeypatch):
-    monkeypatch.setattr(scanner, "_IS_WINDOWS", False)
-    monkeypatch.setattr(os, "readlink", lambda path: "\\\\?\\odd-but-legal")
-
-    assert scanner._link_target("any") == "\\\\?\\odd-but-legal"
 
 
 def test_link_target_is_empty_when_it_cannot_be_read(monkeypatch):

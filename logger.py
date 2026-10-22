@@ -4,17 +4,13 @@ logger.py — centralised logging for FlashScan
 One rotating log file shared by all Python modules and by JS errors forwarded
 through the API bridge (ui/js/log.js -> API.log_js).
 
-Log location:
-  Windows : %APPDATA%/FlashScan/flashscan.log
-  macOS   : ~/Library/Logs/FlashScan/flashscan.log
-  Linux   : ~/.local/share/FlashScan/flashscan.log
+Log location: %APPDATA%/FlashScan/flashscan.log
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import platform
 import sys
 import tempfile
 import threading
@@ -44,13 +40,7 @@ _js_suppressed = 0
 
 
 def _default_dir() -> Path:
-    system = platform.system()
-    if system == "Windows":
-        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-    elif system == "Darwin":
-        base = Path.home() / "Library" / "Logs"
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
     return base / "FlashScan"
 
 

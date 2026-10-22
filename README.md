@@ -97,12 +97,8 @@ These shortcuts are active in the file tree on Step 2.
 
 ## Troubleshooting
 
-FlashScan writes a rotating log file (up to 4 MB in total). If a scan or export fails, click the file icon in the top-right corner to show it in your file manager and attach `flashscan.log` to your report.
+FlashScan writes a rotating log file (up to 4 MB in total). If a scan or export fails, click the file icon in the top-right corner to show it in Explorer and attach `flashscan.log` to your report.
 
-| System | Location |
-|---|---|
-| Windows | `%APPDATA%\FlashScan\flashscan.log` |
-| macOS | `~/Library/Logs/FlashScan/flashscan.log` |
-| Linux | `~/.local/share/FlashScan/flashscan.log` |
+The log is at `%APPDATA%\FlashScan\flashscan.log`.
 
 The log contains the scanned folder path, the output folder and paths of unreadable entries, so check it before sharing if those are private.

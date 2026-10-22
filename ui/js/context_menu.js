@@ -145,8 +145,7 @@ const ContextMenu = (() => {
         if (api) {
           api.open_properties(_curPath).then(r => {
             if (!r) return;
-            if (r.error) { _toast('Error: ' + r.error); return; }
-            if (r.meta)  { _showMetaToast(r); }   // Linux fallback
+            if (r.error) { _toast('Error: ' + r.error); }
           });
         } else {
           _showMetaToast(_curItem);

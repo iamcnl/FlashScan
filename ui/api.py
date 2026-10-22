@@ -15,7 +15,6 @@ Responsible for:
 from __future__ import annotations
 
 import os
-import platform
 import re
 import subprocess
 import threading
@@ -35,8 +34,6 @@ log = logging.getLogger(__name__)
 
 MAX_LOGGED_UNREADABLE = 20
 MAX_LOGGED_LINKS = 20
-
-_SYSTEM = platform.system()  # 'Windows' | 'Darwin' | 'Linux'
 
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _DENIED = {"error": "Path is outside the scanned folders."}
@@ -194,12 +191,7 @@ class API:
             p = Path(path)
             if not p.exists():
                 return {"error": "Path does not exist."}
-            if _SYSTEM == "Windows":
-                os.startfile(str(p))
-            elif _SYSTEM == "Darwin":
-                subprocess.Popen(["open", str(p)])
-            else:
-                subprocess.Popen(["xdg-open", str(p)])
+            os.startfile(str(p))
             return {"ok": True}
         except Exception as e:
             return {"error": str(e)}
@@ -212,84 +204,56 @@ class API:
             p = Path(path)
             if not p.exists():
                 return {"error": "Path does not exist."}
-            if _SYSTEM == "Windows":
-                # /select highlights the specific file in Explorer
-                subprocess.Popen(["explorer", "/select,", str(p)])
-            elif _SYSTEM == "Darwin":
-                subprocess.Popen(["open", "-R", str(p)])
-            else:
-                # On Linux, open the parent folder
-                parent = str(p.parent) if p.is_file() else str(p)
-                subprocess.Popen(["xdg-open", parent])
+            subprocess.Popen(["explorer", "/select,", str(p)])
             return {"ok": True}
         except Exception as e:
             return {"error": str(e)}
 
     def open_properties(self, path: str) -> dict:
-        """Opens the file/folder properties dialog (Windows) or returns metadata."""
+        """Opens the Explorer properties dialog for a file or folder."""
         try:
             if not self._is_trusted(path):
                 return _DENIED
             p = Path(path)
             if not p.exists():
                 return {"error": "Path does not exist."}
-            if _SYSTEM == "Windows":
-                import ctypes
-                import ctypes.wintypes
+            import ctypes
+            import ctypes.wintypes
 
-                class SHELLEXECUTEINFOW(ctypes.Structure):
-                    _fields_ = [
-                        ("cbSize",       ctypes.wintypes.DWORD),
-                        ("fMask",        ctypes.wintypes.ULONG),
-                        ("hwnd",         ctypes.wintypes.HWND),
-                        ("lpVerb",       ctypes.wintypes.LPCWSTR),
-                        ("lpFile",       ctypes.wintypes.LPCWSTR),
-                        ("lpParameters", ctypes.wintypes.LPCWSTR),
-                        ("lpDirectory",  ctypes.wintypes.LPCWSTR),
-                        ("nShow",        ctypes.c_int),
-                        ("hInstApp",     ctypes.wintypes.HINSTANCE),
-                        ("lpIDList",     ctypes.c_void_p),
-                        ("lpClass",      ctypes.wintypes.LPCWSTR),
-                        ("hkeyClass",    ctypes.wintypes.HKEY),
-                        ("dwHotKey",     ctypes.wintypes.DWORD),
-                        ("hIconOrMonitor", ctypes.wintypes.HANDLE),
-                        ("hProcess",     ctypes.wintypes.HANDLE),
-                    ]
+            class SHELLEXECUTEINFOW(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize",       ctypes.wintypes.DWORD),
+                    ("fMask",        ctypes.wintypes.ULONG),
+                    ("hwnd",         ctypes.wintypes.HWND),
+                    ("lpVerb",       ctypes.wintypes.LPCWSTR),
+                    ("lpFile",       ctypes.wintypes.LPCWSTR),
+                    ("lpParameters", ctypes.wintypes.LPCWSTR),
+                    ("lpDirectory",  ctypes.wintypes.LPCWSTR),
+                    ("nShow",        ctypes.c_int),
+                    ("hInstApp",     ctypes.wintypes.HINSTANCE),
+                    ("lpIDList",     ctypes.c_void_p),
+                    ("lpClass",      ctypes.wintypes.LPCWSTR),
+                    ("hkeyClass",    ctypes.wintypes.HKEY),
+                    ("dwHotKey",     ctypes.wintypes.DWORD),
+                    ("hIconOrMonitor", ctypes.wintypes.HANDLE),
+                    ("hProcess",     ctypes.wintypes.HANDLE),
+                ]
 
-                SEE_MASK_INVOKEIDLIST = 0x0000000C
-                SW_SHOW = 5
+            SEE_MASK_INVOKEIDLIST = 0x0000000C
+            SW_SHOW = 5
 
-                sei = SHELLEXECUTEINFOW()
-                sei.cbSize       = ctypes.sizeof(sei)
-                sei.fMask        = SEE_MASK_INVOKEIDLIST
-                sei.hwnd         = None
-                sei.lpVerb       = "properties"
-                sei.lpFile       = str(p)
-                sei.lpParameters = None
-                sei.lpDirectory  = None
-                sei.nShow        = SW_SHOW
+            sei = SHELLEXECUTEINFOW()
+            sei.cbSize       = ctypes.sizeof(sei)
+            sei.fMask        = SEE_MASK_INVOKEIDLIST
+            sei.hwnd         = None
+            sei.lpVerb       = "properties"
+            sei.lpFile       = str(p)
+            sei.lpParameters = None
+            sei.lpDirectory  = None
+            sei.nShow        = SW_SHOW
 
-                ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei))  # type: ignore[attr-defined]
-                return {"ok": True}
-            elif _SYSTEM == "Darwin":
-                # Escape \ and " in path — both characters are legal in macOS names
-                # and would cause injection into the AppleScript string.
-                safe_p = str(p).replace("\\", "\\\\").replace('"', '\\"')
-                subprocess.Popen(["osascript", "-e",
-                    f'tell application "Finder" to open information window of (POSIX file "{safe_p}" as alias)'])
-                return {"ok": True}
-            else:
-                # Linux — return metadata, JS will show a toast
-                stat = p.stat()
-                return {
-                    "ok": True,
-                    "meta": True,
-                    "name": p.name,
-                    "path": str(p),
-                    "size": stat.st_size,
-                    "mtime": int(stat.st_mtime),
-                    "is_dir": p.is_dir(),
-                }
+            ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei))  # type: ignore[attr-defined]
+            return {"ok": True}
         except Exception as e:
             return {"error": str(e)}
 

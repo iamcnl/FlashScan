@@ -1,3 +1,4 @@
+import ctypes
 import json
 import logging
 import os
@@ -90,7 +91,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "SETTINGS_FILE", store / "settings.json")
     monkeypatch.setattr(settings, "PROFILES_DIR", store / "profiles")
     monkeypatch.setattr(scanner, "get_volume_info", lambda path: {"label": "", "serial": None})
-    monkeypatch.setattr(api, "_SYSTEM", "Linux")
+    monkeypatch.setattr(api.os, "startfile", lambda path: None, raising=False)
 
 
 @pytest.fixture
@@ -289,23 +290,8 @@ def test_trusted_but_missing_paths_report_it(app, tmp_path, popen, operation):
     assert popen == []
 
 
-@pytest.mark.parametrize("system, expected", [
-    ("Linux", lambda p: ["xdg-open", p]),
-    ("Darwin", lambda p: ["open", p]),
-])
-def test_open_path_uses_the_platform_opener(app, tmp_path, popen, monkeypatch, system, expected):
-    monkeypatch.setattr(api, "_SYSTEM", system)
-    target = tmp_path / "file.txt"
-    target.write_text("x")
-    app._trust_root(str(tmp_path))
-
-    assert app.open_path(str(target)) == {"ok": True}
-    assert popen == [expected(str(target))]
-
-
-def test_open_path_uses_startfile_on_windows(app, tmp_path, monkeypatch):
+def test_open_path_uses_startfile(app, tmp_path, monkeypatch):
     opened = []
-    monkeypatch.setattr(api, "_SYSTEM", "Windows")
     monkeypatch.setattr(api.os, "startfile", opened.append, raising=False)
     target = tmp_path / "file.txt"
     target.write_text("x")
@@ -316,63 +302,40 @@ def test_open_path_uses_startfile_on_windows(app, tmp_path, monkeypatch):
 
 
 def test_open_path_returns_launcher_failures_as_errors(app, tmp_path, monkeypatch):
-    def broken(*args, **kwargs):
-        raise FileNotFoundError("xdg-open not found")
+    def broken(path):
+        raise OSError("no application is associated with this file")
 
-    monkeypatch.setattr(api.subprocess, "Popen", broken)
+    monkeypatch.setattr(api.os, "startfile", broken, raising=False)
     target = tmp_path / "file.txt"
     target.write_text("x")
     app._trust_root(str(tmp_path))
 
-    assert app.open_path(str(target)) == {"error": "xdg-open not found"}
+    assert app.open_path(str(target)) == {"error": "no application is associated with this file"}
 
 
-@pytest.mark.parametrize("system, as_folder, expected", [
-    ("Linux", False, lambda f, d: ["xdg-open", str(f.parent)]),
-    ("Linux", True, lambda f, d: ["xdg-open", str(d)]),
-    ("Darwin", False, lambda f, d: ["open", "-R", str(f)]),
-    ("Windows", False, lambda f, d: ["explorer", "/select,", str(f)]),
-])
-def test_reveal_selects_in_the_platform_file_manager(
-    app, tmp_path, popen, monkeypatch, system, as_folder, expected
-):
-    monkeypatch.setattr(api, "_SYSTEM", system)
+@pytest.mark.parametrize("as_folder", [False, True])
+def test_reveal_selects_the_item_in_explorer(app, tmp_path, popen, as_folder):
     folder = tmp_path / "docs"
     folder.mkdir()
     file = folder / "file.txt"
     file.write_text("x")
     app._trust_root(str(tmp_path))
+    target = folder if as_folder else file
 
-    assert app.reveal_in_explorer(str(folder if as_folder else file)) == {"ok": True}
-    assert popen == [expected(file, folder)]
+    assert app.reveal_in_explorer(str(target)) == {"ok": True}
+    assert popen == [["explorer", "/select,", str(target)]]
 
 
-def test_properties_return_metadata_on_linux(app, tmp_path):
+def test_properties_open_the_shell_properties_dialog(app, tmp_path, monkeypatch):
+    calls = []
+    shell32 = types.SimpleNamespace(ShellExecuteExW=lambda info: calls.append(info))
+    monkeypatch.setattr(ctypes, "windll", types.SimpleNamespace(shell32=shell32), raising=False)
     target = tmp_path / "file.txt"
-    target.write_bytes(b"12345")
-    app._trust_root(str(tmp_path))
-
-    meta = app.open_properties(str(target))
-
-    assert meta == {
-        "ok": True, "meta": True, "name": "file.txt", "path": str(target),
-        "size": 5, "mtime": int(target.stat().st_mtime), "is_dir": False,
-    }
-
-
-def test_properties_on_macos_escape_the_path_for_applescript(app, tmp_path, popen, monkeypatch):
-    monkeypatch.setattr(api, "_SYSTEM", "Darwin")
-    target = tmp_path / 'we"ird\\name.txt'
-    try:
-        target.write_text("x")
-    except OSError:
-        pytest.skip("file system does not allow quotes or backslashes in names")
+    target.write_text("x")
     app._trust_root(str(tmp_path))
 
     assert app.open_properties(str(target)) == {"ok": True}
-    script = popen[0][2]
-    assert 'we\\"ird\\\\name.txt' in script
-    assert script.endswith('" as alias)')
+    assert len(calls) == 1
 
 
 def test_open_log_folder_reveals_the_log_even_outside_scanned_folders(
@@ -384,7 +347,7 @@ def test_open_log_folder_reveals_the_log_even_outside_scanned_folders(
     monkeypatch.setattr(api.logger, "log_file", lambda: log_file)
 
     assert app.open_log_folder() == {"ok": True}
-    assert popen == [["xdg-open", str(log_file.parent)]]
+    assert popen == [["explorer", "/select,", str(log_file)]]
 
 
 def test_open_log_folder_reports_a_missing_log(app, monkeypatch):
