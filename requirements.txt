@@ -1,2 +1,2 @@
 # Python 3.11+
-pywebview>=4.4
+pywebview>=6.2.1
