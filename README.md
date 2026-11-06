@@ -8,18 +8,28 @@ FlashScan is a Windows desktop utility for scanning disks and folders and export
 
 ## Getting Started
 
-### Prerequisites
+### Download (recommended)
+
+Download `FlashScan.exe` from the [latest release](https://github.com/iamcnl/FlashScan/releases/latest) and run it. No installation and no Python are needed.
+
+- Windows 10 or later, with the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). Most up-to-date Windows 10/11 systems already have it.
+- The app is not code-signed, so Windows SmartScreen may show "Windows protected your PC". Click **More info**, then **Run anyway**.
+- To verify the download, compare the output of `Get-FileHash .\FlashScan.exe -Algorithm SHA256` with the `FlashScan.exe.sha256` file on the release page.
+
+### Run from source
+
+#### Prerequisites
 
 - Windows 10 or later
 - Python 3.11+
 - [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) — required by `pywebview` on Windows. Most up-to-date Windows 10/11 systems already have it installed.
 
-### Installation
+#### Installation
 
 1. **Clone the repository:**
 ```bash
-   git clone https://github.com/iamcnl/flashscan.git
-   cd flashscan
+   git clone https://github.com/iamcnl/FlashScan.git
+   cd FlashScan
 ```
 
 2. **Install dependencies:**
@@ -37,7 +47,7 @@ FlashScan is a Windows desktop utility for scanning disks and folders and export
 
 ## Features
 
-- **Fast File System Scanning**: Scans directories with configurable depth, with options to include hidden and system files.
+- **Fast File System Scanning**: Scans directories with configurable depth, with options to include hidden and system files. Paths longer than 260 characters are scanned too.
 - **Interactive File Tree**: A virtualized, high-performance tree view displays the scanned folder structure, capable of handling very large file lists smoothly.
 - **Advanced Filtering & Selection**:
   - Filter files by extension, with pre-defined categories and support for custom extensions.
@@ -92,6 +102,17 @@ These shortcuts are active in the file tree on Step 2.
 | `Enter` | Toggle file selection; collapse / expand the focused folder |
 | `Shift+Click` | Range-select files |
 | `Enter` *(path input)* | Start scan |
+
+---
+
+## Building the executable
+
+```bash
+pip install -r requirements.txt -r requirements-build.txt
+pyinstaller FlashScan.spec
+```
+
+The result is `dist/FlashScan.exe`. Pushing a tag such as `v1.0.1` runs the tests, builds the executable on GitHub Actions, and publishes it as a release.
 
 ---
 

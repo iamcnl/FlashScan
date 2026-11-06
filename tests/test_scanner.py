@@ -610,3 +610,71 @@ def test_scan_reports_volume_details(root, monkeypatch):
     assert r["volume_label"] == "MY USB"
     assert r["volume_id"] == scanner.make_volume_id({"serial": None}, str(root))
     assert r["volume_root"] == str(root.anchor)
+
+
+# ── Long paths ────────────────────────────────────────────────────
+
+@pytest.fixture
+def windows(monkeypatch):
+    monkeypatch.setattr(scanner, "_WINDOWS", True)
+
+
+def long_drive_path(length):
+    return "K:\\" + "\\".join(["x" * 50] * (length // 51 + 1))[: length - 3]
+
+
+def test_short_paths_are_left_alone(windows):
+    assert scanner._extended("K:\\Photos") == "K:\\Photos"
+
+
+def test_long_paths_get_the_extended_prefix(windows):
+    path = long_drive_path(300)
+    assert len(path) == 300
+    assert scanner._extended(path) == "\\\\?\\" + path
+
+
+def test_long_network_paths_use_the_unc_form(windows):
+    path = "\\\\server\\share\\" + "\\".join(["x" * 50] * 6)
+    assert scanner._extended(path) == "\\\\?\\UNC\\" + path[2:]
+
+
+def test_already_prefixed_paths_are_not_prefixed_twice(windows):
+    path = "\\\\?\\" + long_drive_path(300)
+    assert scanner._extended(path) == path
+
+
+def test_paths_are_never_touched_off_windows(monkeypatch):
+    monkeypatch.setattr(scanner, "_WINDOWS", False)
+    path = long_drive_path(300)
+    assert scanner._extended(path) == path
+
+
+def test_scan_lists_folders_deeper_than_the_windows_limit_under_their_plain_paths(root):
+    deep = root
+    for _ in range(6):
+        deep = deep / ("d" * 50)
+    deep.mkdir(parents=True)
+    (deep / "leaf.txt").write_bytes(b"x" * 7)
+
+    result = scan(root)
+
+    leaf = item(result, "leaf.txt")
+    assert len(leaf["path"]) > 260
+    assert leaf["path"] == str(deep / "leaf.txt")
+    assert not leaf["path"].startswith("\\\\?\\")
+    assert result["unreadable_count"] == 0
+    assert item(result, "d" * 50)["size"] == 7
+
+
+def test_every_directory_read_goes_through_the_long_path_helper(root, monkeypatch):
+    build(root, {"a/b/file.txt": 1})
+    asked = []
+
+    def extended(path):
+        asked.append(path)
+        return path
+
+    monkeypatch.setattr(scanner, "_extended", extended)
+    scan(root)
+
+    assert set(asked) == {str(root), str(root / "a"), str(root / "a" / "b")}

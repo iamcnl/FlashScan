@@ -645,6 +645,10 @@ const AdvFilter = {
     }
   },
 
+  refreshDateFormat() {
+    this._calUpdateHint();
+  },
+
   // Converts preset to { from, to } Date objects
   _resolveDateRange() {
     if (!this._datePreset) return { from: null, to: null };

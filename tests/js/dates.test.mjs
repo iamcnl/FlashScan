@@ -140,3 +140,26 @@ test("changing the format redraws the dates in the file list", async () => {
     assert.match(host.textContent, /2024-03-05/);
   });
 });
+
+
+test("the custom range label follows the date format chosen in settings", async () => {
+  await withApp(async (app) => {
+    const hint = () => app.document.getElementById("adv-cal-hint").textContent;
+    app.evaluate(`
+      DateFmt.setMode("mdy");
+      AdvFilter._calFrom = new Date(2026, 10, 5);
+      AdvFilter._calTo = new Date(2026, 10, 13);
+      AdvFilter._calStep = 0;
+      AdvFilter._calUpdateHint();
+    `);
+    assert.equal(hint(), "11/05/2026 \u2013 11/13/2026");
+
+    app.evaluate(`
+      SettingsDialog.open();
+      const select = document.getElementById("settings-date-format");
+      select.value = "dmy";
+      select.dispatchEvent(new Event("change"));
+    `);
+    assert.equal(hint(), "05. 11. 2026 \u2013 13. 11. 2026");
+  });
+});

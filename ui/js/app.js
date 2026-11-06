@@ -248,6 +248,7 @@ const SettingsDialog = {
       State.settings.dateFormat = DateFmt.mode;
       window.pywebview?.api?.save_settings({ dateFormat: DateFmt.mode });
       showPreview();
+      AdvFilter.refreshDateFormat();
       if (State.treeData?.length) Tree.render();
     });
   },

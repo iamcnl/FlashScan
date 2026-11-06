@@ -8,6 +8,7 @@ Returns a flat list of dict items compatible with JS State.reset().
 from __future__ import annotations
 
 import ctypes
+import ntpath
 import operator
 import os
 import stat
@@ -62,6 +63,20 @@ IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
 
 _by_name = operator.attrgetter("name")
 
+_WINDOWS = os.name == "nt"
+_EXTENDED_PREFIX = "\\\\?\\"
+_LONG_PATH_THRESHOLD = 240
+
+
+def _extended(path: str) -> str:
+    """Prefixes long Windows paths so the 260-character limit does not apply to them."""
+    if not _WINDOWS or len(path) < _LONG_PATH_THRESHOLD or path.startswith(_EXTENDED_PREFIX):
+        return path
+    path = ntpath.abspath(path)
+    if path.startswith("\\\\"):
+        return _EXTENDED_PREFIX + "UNC\\" + path[2:]
+    return _EXTENDED_PREFIX + path
+
 
 def _reason(error: OSError) -> str:
     return error.strerror or type(error).__name__
@@ -88,7 +103,7 @@ def _is_dir(entry: os.DirEntry) -> bool:
 
 def _link_target(path) -> str:
     try:
-        target = os.readlink(path)
+        target = os.readlink(_extended(path))
     except OSError:
         return ""
     if target.startswith("\\\\?\\UNC\\"):
@@ -169,7 +184,7 @@ def scan_path(
         dirpath, folder_name, depth, parent_idx, dir_st, dir_err = stack.pop()
 
         try:
-            with os.scandir(dirpath) as it:
+            with os.scandir(_extended(dirpath)) as it:
                 entries = sorted(it, key=_by_name)
         except OSError as e:
             if parent_idx is None:
@@ -179,7 +194,7 @@ def scan_path(
 
         if parent_idx is None:
             try:
-                dir_st = os.stat(dirpath)
+                dir_st = os.stat(_extended(dirpath))
             except OSError as e:
                 dir_err = e
         if dir_st is not None:
@@ -206,6 +221,7 @@ def scan_path(
         for entry in entries:
             check_cancelled()
             name = entry.name
+            path = os.path.join(dirpath, name)
             try:
                 st, err = _lstat(entry), None
             except OSError as e:
@@ -228,14 +244,14 @@ def scan_path(
                 skipped += 1
                 continue
             if link:
-                note_link(entry.path, "folder" if is_dir else "file")
+                note_link(path, "folder" if is_dir else "file")
                 continue
 
             if is_dir:
-                subdirs.append((entry.path, name, depth + 1, folder_idx, st, err))
+                subdirs.append((path, name, depth + 1, folder_idx, st, err))
                 continue
             if st is None:
-                note_unreadable(entry.path, "file", err)
+                note_unreadable(path, "file", err)
                 continue
 
             size = st.st_size
@@ -243,7 +259,7 @@ def scan_path(
                 "lvl":   depth + 1,
                 "type":  "file",
                 "name":  name,
-                "path":  entry.path,
+                "path":  path,
                 "size":  size,
                 "mtime": st.st_mtime,
             })
