@@ -608,8 +608,8 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--ex-b
           text-decoration: underline; text-underline-offset: 2px;
           text-decoration-color: var(--ex-subtle); }
 .tb-btn:hover { color: var(--ex-text2); text-decoration-color: var(--ex-muted); }
-.tb-btn-theme { text-decoration: none; font-size: 11px; color: var(--ex-subtle); }
-.tb-btn-theme:hover { color: var(--ex-muted); }
+.tb-btn-theme { margin-left: auto; text-decoration: none; font-size: 11px; color: var(--ex-muted); }
+.tb-btn-theme:hover { color: var(--ex-text2); }
 
 /* ── Tree ── */
 .folder { margin-bottom: 1px; }
