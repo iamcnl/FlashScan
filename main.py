@@ -28,6 +28,8 @@ log = logging.getLogger(__name__)
 
 UI_DIR  = Path(__file__).parent / "ui"
 UI_HTML = UI_DIR / "index.html"
+ICON    = Path(__file__).parent / "assets" / "FlashScan.ico"
+APP_ID  = "FlashScan.App"
 
 REVEAL_TIMEOUT_S = 3.0
 
@@ -39,7 +41,17 @@ def _pywebview_version() -> str:
         return "unknown"
 
 
+def _set_app_user_model_id() -> None:
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+
+
 def main():
+    _set_app_user_model_id()
+    log.info("icon: %s (exists=%s)", ICON, ICON.is_file())
     log.info(
         "FlashScan starting: python %s, %s, pywebview %s",
         platform.python_version(), platform.platform(), _pywebview_version(),
@@ -66,7 +78,7 @@ def main():
         reveal_timer.daemon = True
         reveal_timer.start()
 
-    webview.start(on_started, debug=False)
+    webview.start(on_started, debug=False, icon=str(ICON))
     log.info("FlashScan closed")
 
 
