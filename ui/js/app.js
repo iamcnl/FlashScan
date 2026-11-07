@@ -12,6 +12,8 @@
 const CHECK_SVG = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
 /* ── Navigation ── */
+const LOCKED_STEP_HINT = 'Scan a folder first';
+
 const Nav = {
   _current: 0,
   _maxReached: 0,
@@ -27,7 +29,21 @@ const Nav = {
       el.classList.toggle('active', i === n);
     });
 
-    // Steps
+    this._renderSteps();
+
+    // Side effects on transition
+    if (n === 2) { Export.updateSummary(); Export.renderNameChips(); }
+  },
+
+  unlock(n) {
+    if (n > this._maxReached) {
+      this._maxReached = n;
+      this._renderSteps();
+    }
+  },
+
+  _renderSteps() {
+    const n = this._current;
     document.querySelectorAll('.step').forEach((el, i) => {
       el.classList.remove('active', 'done', 'clickable');
       if (i === n) {
@@ -36,6 +52,18 @@ const Nav = {
         el.classList.add('done');
         if (i <= this._maxReached && i !== n) el.classList.add('clickable');
       }
+
+      const locked = i > this._maxReached;
+      if (locked) {
+        el.setAttribute('aria-disabled', 'true');
+        el.title = LOCKED_STEP_HINT;
+      } else {
+        el.removeAttribute('aria-disabled');
+        el.removeAttribute('title');
+      }
+      if (i === n) el.setAttribute('aria-current', 'step');
+      else         el.removeAttribute('aria-current');
+
       // Step number: done → checkmark, otherwise number
       const snum = el.querySelector('.snum');
       if (snum) {
@@ -43,13 +71,6 @@ const Nav = {
         else       snum.textContent = i + 1;
       }
     });
-
-    // Side effects on transition
-    if (n === 2) { Export.updateSummary(); Export.renderNameChips(); }
-  },
-
-  unlock(n) {
-    if (n > this._maxReached) this._maxReached = n;
   },
 
   reset() {
@@ -87,6 +108,19 @@ function initCheckbox(id, stateKey, onChange) {
 
 function setCheckbox(id, on) {
   document.getElementById(id)?.classList.toggle('on', !!on);
+}
+
+/* ── Step indicator ── */
+function initSteps() {
+  document.querySelectorAll('.step[data-step]').forEach(el => {
+    const open = () => Nav.go(parseInt(el.dataset.step));
+    el.addEventListener('click', open);
+    el.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      open();
+    });
+  });
 }
 
 /* ── Format cell ── */
@@ -547,13 +581,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   ProfileNote.init();
   ScanIssues.init();
 
-  // Navigation — steps are clickable
-  document.querySelectorAll('.step[data-step]').forEach(el => {
-    el.addEventListener('click', () => {
-      const n = parseInt(el.dataset.step);
-      Nav.go(n);
-    });
-  });
+  initSteps();
 
   // Navigation buttons
   document.getElementById('btn-back-0')?.addEventListener('click', () => Nav.go(0));

@@ -84,6 +84,7 @@ html {
 .step.clickable { cursor: pointer; }
 .step.clickable:hover { background: var(--card2); color: var(--text2); }
 .step.done  { color: var(--text2); }
+.step[aria-disabled="true"] { opacity: .45; }
 .step.active { background: var(--accent); color: #fff; }
 
 .step .snum {
