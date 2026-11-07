@@ -499,7 +499,7 @@ const ProfileNote = {
     const c = this._count.bind(this);
     return {
       title: 'Reset saved state for this drive?',
-      intro: `This permanently deletes what FlashScan remembers about ${info.label ? `\u201C${info.label}\u201D` : 'this drive'}:`,
+      intro: `This clears what FlashScan remembers about ${info.label ? `\u201C${info.label}\u201D` : 'this drive'}:`,
       items: [
         info.notes    && c(info.notes,    'folder note',                                'folder notes'),
         info.folders  && c(info.folders,  'folder set to names only or skipped',        'folders set to names only or skipped'),
