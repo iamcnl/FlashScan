@@ -378,13 +378,19 @@
   line-height: 1;
   cursor: default;
   user-select: none;
+  box-sizing: content-box;
+  padding: 0;
+  background: none;
   transition: border-color var(--transition), color var(--transition);
 }
 
-.tooltip-wrap:hover .tooltip-icon {
+.tooltip-wrap:hover .tooltip-icon,
+.tooltip-icon:focus-visible {
   border-color: var(--text2);
   color: var(--text2);
 }
+
+.tooltip-icon:focus-visible { border-radius: 50%; }
 
 .tooltip-bubble {
   position: absolute;
@@ -421,7 +427,8 @@
   border-top-color: var(--accent);
 }
 
-.tooltip-wrap:hover .tooltip-bubble {
+.tooltip-wrap:hover .tooltip-bubble,
+.tooltip-wrap:focus-within .tooltip-bubble {
   opacity: 1;
 }
 /* ── Search row ── */

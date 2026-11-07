@@ -93,26 +93,30 @@
               <span class="depth-label">depth</span>
               <input class="depth-input" id="depth-input" type="number" min="1" max="50" value="10">
               <span class="tooltip-wrap">
-                <span class="tooltip-icon">?</span>
-                <span class="tooltip-bubble">How deep into the folder structure to scan. A value of 10 covers most folder levers; higher values slow down the scan.</span>
+                <button type="button" class="tooltip-icon" aria-label="About depth" aria-describedby="tip-depth">?</button>
+                <span class="tooltip-bubble" id="tip-depth" role="tooltip">How deep into the folder structure to scan. A value of 10 covers most folder levels; higher values slow down the scan.</span>
               </span>
             </div>
-            <label class="cb-row" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <div class="cb" id="cb-hidden"></div>
-              <span style="font-size:12px;color:var(--text2);white-space:nowrap;">hidden files</span>
+            <div class="opt-item">
+              <label class="cb-row" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <div class="cb" id="cb-hidden"></div>
+                <span style="font-size:12px;color:var(--text2);white-space:nowrap;">hidden files</span>
+              </label>
               <span class="tooltip-wrap" style="margin-left:2px;">
-                <span class="tooltip-icon">?</span>
-                <span class="tooltip-bubble">Include files and folders starting with a dot (e.g. .git, .env, .DS_Store).</span>
+                <button type="button" class="tooltip-icon" aria-label="About hidden files" aria-describedby="tip-hidden">?</button>
+                <span class="tooltip-bubble" id="tip-hidden" role="tooltip">Include hidden files and folders: names starting with a dot (e.g. .git, .env, .DS_Store) and items marked hidden in Windows.</span>
               </span>
-            </label>
-            <label class="cb-row" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <div class="cb" id="cb-system"></div>
-              <span style="font-size:12px;color:var(--text2);white-space:nowrap;">system folders</span>
+            </div>
+            <div class="opt-item">
+              <label class="cb-row" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <div class="cb" id="cb-system"></div>
+                <span style="font-size:12px;color:var(--text2);white-space:nowrap;">system folders</span>
+              </label>
               <span class="tooltip-wrap">
-                <span class="tooltip-icon">?</span>
-                <span class="tooltip-bubble">Include OS system folders (e.g. Windows, System32, Recycle Bin). Usually not needed.</span>
+                <button type="button" class="tooltip-icon" aria-label="About system folders" aria-describedby="tip-system">?</button>
+                <span class="tooltip-bubble" id="tip-system" role="tooltip">Include system folders and files, such as $RECYCLE.BIN and System Volume Information. Usually not needed.</span>
               </span>
-            </label>
+            </div>
           </div>
         </div>
 
