@@ -244,6 +244,9 @@ const Export = {
 
   _setRunning(running) {
     this._running = running;
+    Nav.hold(running);
+    const back = document.getElementById('btn-back-1');
+    if (back) back.disabled = running;
     const btn  = document.getElementById('btn-export');
     const wrap = document.getElementById('export-progress-wrap');
     const bar  = document.getElementById('export-progress-bar');

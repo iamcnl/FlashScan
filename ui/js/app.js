@@ -13,12 +13,15 @@ const CHECK_SVG = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" str
 
 /* ── Navigation ── */
 const LOCKED_STEP_HINT = 'Scan a folder first';
+const HELD_STEP_HINT   = 'Export in progress';
 
 const Nav = {
   _current: 0,
   _maxReached: 0,
+  _held: false,
 
   go(n) {
+    if (this._held && n !== this._current) return;  // an export is running
     if (n > this._maxReached && n !== 0) return;  // cannot skip forward
 
     this._current = n;
@@ -42,21 +45,26 @@ const Nav = {
     }
   },
 
+  hold(held) {
+    this._held = held;
+    this._renderSteps();
+  },
+
   _renderSteps() {
     const n = this._current;
     document.querySelectorAll('.step').forEach((el, i) => {
+      const held = this._held && i !== n;
       el.classList.remove('active', 'done', 'clickable');
       if (i === n) {
         el.classList.add('active');
       } else if (i < n || i <= this._maxReached) {
         el.classList.add('done');
-        if (i <= this._maxReached && i !== n) el.classList.add('clickable');
+        if (i <= this._maxReached && !held) el.classList.add('clickable');
       }
 
-      const locked = i > this._maxReached;
-      if (locked) {
+      if (held || i > this._maxReached) {
         el.setAttribute('aria-disabled', 'true');
-        el.title = LOCKED_STEP_HINT;
+        el.title = held ? HELD_STEP_HINT : LOCKED_STEP_HINT;
       } else {
         el.removeAttribute('aria-disabled');
         el.removeAttribute('title');
