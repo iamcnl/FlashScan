@@ -723,7 +723,6 @@ def test_export_uses_the_scan_taken_when_it_was_requested(app, window, drive, ou
     ({}, ["a.txt", "b.log", "n.md", "p.png"]),
     ({"all_except": ["B"]}, ["a.txt", "n.md", "p.png"]),
     ({"only": ["A", "N"]}, ["a.txt", "n.md"]),
-    ({"only": []}, []),
 ])
 def test_export_follows_the_file_selection(app, window, drive, out, selection, files):
     scan = run_scan(app, window, drive)
@@ -737,6 +736,40 @@ def test_export_follows_the_file_selection(app, window, drive, out, selection, f
     result = run_export(app, window, scan["scan_id"], out, ["JSON"], chosen)
 
     assert exported_names(result["saved"][0])[0] == files
+
+
+NOTHING_SELECTED = {
+    "no files": lambda d: {"only": []},
+    "every file deselected": lambda d: {
+        "all_except": [str(d / "a.txt"), str(d / "b.log"), str(d / "docs" / "n.md"),
+                       str(d / "photos" / "p.png")],
+    },
+    "root folder skipped": lambda d: {"all_except": [], "folder_states": {str(d): "skip"}},
+    "extension filter matches nothing": lambda d: {"all_except": [], "active_exts": ["xyz"]},
+}
+
+
+@pytest.mark.parametrize("selection", NOTHING_SELECTED.values(), ids=NOTHING_SELECTED.keys())
+def test_export_refuses_a_selection_that_resolves_to_nothing(app, window, drive, out, selection):
+    scan = run_scan(app, window, drive)
+    reply = app.export({
+        "scan_id": scan["scan_id"], "formats": ["MD"], "output_dir": str(out),
+        "selection": selection(drive),
+    })
+
+    assert reply == {"success": False, "error": "Nothing selected to export."}
+    assert os.listdir(out) == []
+    assert window.starting("onExportProgress") == []
+    assert app._exporting is False
+    assert run_export(app, window, scan["scan_id"], out)["success"] is True
+
+
+def test_export_allows_folder_names_without_any_files(app, window, drive, out):
+    scan = run_scan(app, window, drive)
+    selection = {"only": [], "folder_states": {str(drive): "name"}}
+    result = run_export(app, window, scan["scan_id"], out, ["JSON"], selection)
+
+    assert exported_names(result["saved"][0]) == ([], ["drive"])
 
 
 def test_export_applies_folder_states_extension_filter_and_notes(app, window, drive, out):

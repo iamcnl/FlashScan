@@ -43,7 +43,8 @@ const State = {
   // ── Export cache ──────────────────────────────────────────────
   // Recomputed only when selectedFiles or folderStates change
   _exportCacheDirty: true,
-  _exportCache: null,   // { count, size, nameOnly, files[] }
+  _exportCache: null,   // { count, size, nameOnly, empty }
+  _exportCacheExts: null,   // activeExts the cache was computed for (filters.js always assigns a new value)
 
   _markDirty() {
     this._exportCacheDirty = true;
@@ -51,7 +52,9 @@ const State = {
   },
 
   exportStats() {
-    if (!this._exportCacheDirty && this._exportCache) return this._exportCache;
+    if (!this._exportCacheDirty && this._exportCache && this._exportCacheExts === this.activeExts) {
+      return this._exportCache;
+    }
 
     let count    = 0;
     let size     = 0;
@@ -81,11 +84,17 @@ const State = {
       if (blocked(item.path)) continue;
       const parentState = this.folderStates[item.path.replace(/[\\/][^\\/]+$/, '')];
       if (parentState === 'skip' || parentState === 'name') continue;
+      if (this.activeExts) {
+        const dot = item.name.lastIndexOf('.');
+        const ext = dot >= 0 ? item.name.slice(dot + 1).toLowerCase() : '';
+        if (ext && !this.activeExts.has(ext)) continue;
+      }
       count++;
       size += item.size || 0;
     }
 
-    this._exportCache      = { count, size, nameOnly };
+    this._exportCache      = { count, size, nameOnly, empty: count === 0 && nameOnly === 0 };
+    this._exportCacheExts  = this.activeExts;
     this._exportCacheDirty = false;
     return this._exportCache;
   },

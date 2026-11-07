@@ -99,12 +99,13 @@ const Export = {
 
   /** Updates the summary box when switching to screen 2 */
   updateSummary() {
-    const { count, size, nameOnly } = State.exportStats();
+    const { count, size, nameOnly, empty } = State.exportStats();
     const fmts = this._selectedFormats();
 
     const parts = [`<strong>${count} files</strong>`];
     if (size)     parts.push(fmtSize(size));
     if (nameOnly) parts.push(`${nameOnly} folders name only`);
+    if (empty)    parts.push('<span class="export-warn">⚠ nothing selected to export</span>');
     if (fmts.length) parts.push(`format: <strong>${escapeHtml(fmts.join(', '))}</strong>`);
     else             parts.push('<span class="export-warn">⚠ no format selected</span>');
 
@@ -204,6 +205,10 @@ const Export = {
 
     if (!fmts.length) {
       this._showResult('Select at least one format.', 'error');
+      return;
+    }
+    if (State.exportStats().empty) {
+      this._showResult('Nothing selected to export.', 'error');
       return;
     }
     if (!outDir) {

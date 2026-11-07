@@ -430,12 +430,18 @@ class API:
             if self._exporting:
                 log.info("Export rejected: another export is running")
                 return {"busy": True}
+            if self._nothing_to_export(scan, selection):
+                return self._refuse_export("Nothing selected to export.", out_path)
             self._exporting = True
 
         threading.Thread(
             target=self._run_export, args=(scan, selection, params, out_path), daemon=True
         ).start()
         return {"async": True}
+
+    def _nothing_to_export(self, scan: dict, selection: dict) -> bool:
+        items = self._export_items(scan, selection)
+        return not any(item[1] == "file" or item[6] == "name" for item in items)
 
     @staticmethod
     def _refuse_export(message: str, out_path: Path) -> dict:
@@ -461,14 +467,8 @@ class API:
         date_pattern = exporter.normalize_date_pattern(params.get("date_pattern"))
         custom_names = params.get("custom_names", {})
         folder_notes = selection.get("folder_notes", {})
-        raw_exts     = selection.get("active_exts")
-        active_exts  = set(raw_exts) if raw_exts is not None else None
-        tree         = scan["tree"]
 
-        items = list(exporter.iter_export(
-            tree, selection.get("folder_states", {}),
-            self._selected_files(tree, selection), active_exts,
-        ))
+        items = list(self._export_items(scan, selection))
         meta = self._build_meta(items, scan, date_pattern)
 
         total       = len(items)
@@ -540,6 +540,17 @@ class API:
 
     def _emit_export_progress(self, done: int, total: int, fmt: str) -> None:
         self._notify(f"onExportProgress({done}, {total}, {json.dumps(fmt)})")
+
+    def _export_items(self, scan: dict, selection: dict):
+        import exporter  # lazy
+
+        raw_exts    = selection.get("active_exts")
+        active_exts = set(raw_exts) if raw_exts is not None else None
+        tree        = scan["tree"]
+        return exporter.iter_export(
+            tree, selection.get("folder_states", {}),
+            self._selected_files(tree, selection), active_exts,
+        )
 
     @staticmethod
     def _selected_files(tree: list, selection: dict) -> set:
