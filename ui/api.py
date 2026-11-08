@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import subprocess
 import threading
 from datetime import datetime
@@ -29,6 +30,9 @@ import webview  # pywebview
 
 import logger
 import settings
+from friendly_errors import (
+    ERROR_FILENAME_EXCED_RANGE, NO_PERMISSION, NOT_A_FOLDER, describe_error,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +42,22 @@ MAX_LOGGED_LINKS = 20
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _DENIED = {"error": "Path is outside the scanned folders."}
 _EXPORT_EXTS = {"MD": ".md", "TXT": ".txt", "JSON": ".json", "HTML": ".html"}
+
+
+def _folder_state(path) -> str:
+    """'folder', 'file' or 'missing'. Raises OSError/ValueError for paths that cannot be checked."""
+    try:
+        mode = os.stat(path).st_mode
+    except (FileNotFoundError, NotADirectoryError) as e:
+        if getattr(e, "winerror", None) == ERROR_FILENAME_EXCED_RANGE:
+            raise
+        return "missing"
+    return "folder" if stat.S_ISDIR(mode) else "file"
+
+
+def _failure(operation: str, exc: Exception) -> dict:
+    log.exception("%s failed", operation)
+    return {"error": describe_error(exc, "read")}
 _LAUNCHABLE_EXTS = frozenset({
     ".exe", ".com", ".scr", ".pif", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".js", ".jse",
     ".wsf", ".wsh", ".hta", ".msi", ".msp", ".msix", ".appx", ".application", ".lnk",
@@ -212,7 +232,7 @@ class API:
             os.startfile(str(p))
             return {"ok": True}
         except Exception as e:
-            return {"error": str(e)}
+            return _failure("open_path", e)
 
     def reveal_in_explorer(self, path: str) -> dict:
         """Reveals a file/folder in the native file manager."""
@@ -225,7 +245,7 @@ class API:
             subprocess.Popen(["explorer", "/select,", str(p)])
             return {"ok": True}
         except Exception as e:
-            return {"error": str(e)}
+            return _failure("reveal_in_explorer", e)
 
     def open_properties(self, path: str) -> dict:
         """Opens the Explorer properties dialog for a file or folder."""
@@ -273,7 +293,7 @@ class API:
             ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei))  # type: ignore[attr-defined]
             return {"ok": True}
         except Exception as e:
-            return {"error": str(e)}
+            return _failure("open_properties", e)
 
     # ── Scanning ──────────────────────────────────────────────────
 
@@ -297,8 +317,16 @@ class API:
         errors = []
         if not (1 <= depth <= 50):
             errors.append("Invalid scan depth (allowed: 1–50).")
-        if not Path(path).exists():
-            errors.append("Path does not exist.")
+        try:
+            folder = _folder_state(path)
+        except (OSError, ValueError) as e:
+            log.warning("Scan path check failed: %r (path=%r)", e, path)
+            errors.append(describe_error(e, "read"))
+        else:
+            if folder == "missing":
+                errors.append("Path does not exist.")
+            elif folder == "file":
+                errors.append(NOT_A_FOLDER)
         if errors:
             log.warning("Scan rejected: %s (path=%r)", "; ".join(errors), path)
             return {"errors": errors}
@@ -352,7 +380,7 @@ class API:
                 call = "onScanCancelled()"
             except Exception as e:
                 log.exception("Scan failed: id=%d path=%r", scan_id, path)
-                call = f"onScanDone({json.dumps({'error': str(e)}, ensure_ascii=False)})"
+                call = f"onScanDone({json.dumps({'error': describe_error(e, 'read')}, ensure_ascii=False)})"
 
             # Release before notifying JS so a scan started from the callback is accepted.
             # A cancelled or failed scan keeps the previous tree, which the UI still shows.
@@ -412,10 +440,17 @@ class API:
                                folder_notes, active_exts: [ext] | null } }
         """
         out_path = Path(params.get("output_dir", ""))
-        if not out_path.exists():
+        try:
+            folder = _folder_state(out_path)
+        except (OSError, ValueError) as e:
+            log.warning("Output folder check failed: %r (output=%r)", e, str(out_path))
+            return self._refuse_export(describe_error(e, "write"), out_path)
+        if folder == "missing":
             return self._refuse_export("Output folder does not exist.", out_path)
+        if folder == "file":
+            return self._refuse_export(NOT_A_FOLDER, out_path)
         if not os.access(out_path, os.W_OK):
-            return self._refuse_export("Cannot write to output folder (permission denied).", out_path)
+            return self._refuse_export(NO_PERMISSION["write"], out_path)
 
         with self._scan_lock:
             scan = self._scan_data
@@ -453,7 +488,7 @@ class API:
             result = self._write_exports(scan, selection, params, out_path)
         except Exception as e:
             log.exception("Export failed unexpectedly (output=%r)", str(out_path))
-            result = {"success": False, "error": str(e)}
+            result = {"success": False, "error": describe_error(e, "write")}
         with self._export_lock:
             self._exporting = False
         self._notify(f"onExportDone({json.dumps(result, ensure_ascii=False)})")
@@ -516,7 +551,7 @@ class API:
                             ours.unlink(missing_ok=True)
                         except OSError:
                             pass
-                errors.append(f"{fmt}: {e}")
+                errors.append(f"{fmt}: {describe_error(e, 'write')}")
             else:
                 self._trust_file(str(out_file))
                 saved.append(str(out_file))

@@ -229,7 +229,8 @@ const Export = {
       else             this._showResult('Error: ' + (result.error || 'unknown error'), 'error');
     } catch (e) {
       this._setRunning(false);
-      this._showResult('Export error: ' + e.message, 'error');
+      console.error(e);
+      this._showResult(UNEXPECTED_ERROR, 'error');
     }
   },
 

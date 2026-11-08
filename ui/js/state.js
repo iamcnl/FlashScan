@@ -7,6 +7,8 @@
  *   { lvl, type, name, path, size, mtime }
  */
 
+const UNEXPECTED_ERROR = 'Something went wrong. Details are in the log.';
+
 const _HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 function escapeHtml(value) {

@@ -1,4 +1,5 @@
 import ctypes
+import errno
 import json
 import logging
 import os
@@ -13,6 +14,9 @@ import pytest
 import exporter
 import scanner
 import settings
+from friendly_errors import (
+    DISK_FULL, GENERIC_ERROR, NO_ASSOCIATION, NO_PERMISSION, NOT_A_FOLDER, PATH_TOO_LONG,
+)
 from ui import api
 
 
@@ -301,16 +305,31 @@ def test_open_path_uses_startfile(app, tmp_path, monkeypatch):
     assert opened == [str(target)]
 
 
-def test_open_path_returns_launcher_failures_as_errors(app, tmp_path, monkeypatch):
+def test_open_path_explains_a_missing_file_association(app, tmp_path, monkeypatch):
     def broken(path):
-        raise OSError("no application is associated with this file")
+        exc = OSError("no application is associated with this file")
+        exc.winerror = 1155
+        raise exc
 
     monkeypatch.setattr(api.os, "startfile", broken, raising=False)
     target = tmp_path / "file.txt"
     target.write_text("x")
     app._trust_root(str(tmp_path))
 
-    assert app.open_path(str(target)) == {"error": "no application is associated with this file"}
+    assert app.open_path(str(target)) == {"error": NO_ASSOCIATION}
+
+
+def test_open_path_hides_unexpected_launcher_failures_but_logs_them(app, tmp_path, monkeypatch, caplog):
+    def broken(path):
+        raise RuntimeError("kernel panic")
+
+    monkeypatch.setattr(api.os, "startfile", broken, raising=False)
+    target = tmp_path / "file.txt"
+    target.write_text("x")
+    app._trust_root(str(tmp_path))
+
+    assert app.open_path(str(target)) == {"error": GENERIC_ERROR}
+    assert "kernel panic" in caplog.text
 
 
 @pytest.mark.parametrize("name", [
@@ -416,6 +435,44 @@ def test_scan_rejects_depth_outside_the_allowed_range(app, window, drive, depth)
 
 def test_scan_rejects_a_missing_path(app, window, tmp_path):
     assert app.scan(scan_params(tmp_path / "nope")) == {"errors": ["Path does not exist."]}
+
+
+def test_scan_rejects_a_path_that_is_a_file(app, tmp_path):
+    target = tmp_path / "readme.txt"
+    target.write_text("x")
+
+    assert app.scan(scan_params(target)) == {"errors": [NOT_A_FOLDER]}
+
+
+def test_scan_explains_a_path_that_cannot_be_checked(app, tmp_path, monkeypatch, caplog):
+    def too_long(path):
+        raise OSError(errno.ENAMETOOLONG, "File name too long", str(path))
+
+    monkeypatch.setattr(api, "_folder_state", too_long)
+
+    assert app.scan(scan_params(tmp_path)) == {"errors": [PATH_TOO_LONG]}
+    assert "File name too long" in caplog.text
+
+
+def test_folder_state_tells_folders_files_and_missing_paths_apart(tmp_path):
+    (tmp_path / "f.txt").write_text("x")
+
+    assert api._folder_state(tmp_path) == "folder"
+    assert api._folder_state(tmp_path / "f.txt") == "file"
+    assert api._folder_state(tmp_path / "gone") == "missing"
+    assert api._folder_state(tmp_path / "f.txt" / "inside") == "missing"
+
+
+def test_folder_state_does_not_mistake_a_windows_too_long_path_for_a_missing_one(monkeypatch):
+    def too_long(path):
+        exc = FileNotFoundError(errno.ENOENT, "path too long")
+        exc.winerror = 206
+        raise exc
+
+    monkeypatch.setattr(api, "os", types.SimpleNamespace(stat=too_long))
+
+    with pytest.raises(FileNotFoundError):
+        api._folder_state("x")
 
 
 def test_scan_reports_every_validation_error_at_once(app, tmp_path):
@@ -570,6 +627,17 @@ def test_scan_progress_is_forwarded_until_cancel(app, window, drive, monkeypatch
     assert window.starting("onScanProgress") == ["onScanProgress(1)"]
 
 
+def test_a_scan_failure_shows_a_sentence_and_logs_the_detail(app, window, drive, monkeypatch, caplog):
+    def denied(*args):
+        raise PermissionError(errno.EACCES, "Access is denied", str(drive))
+
+    monkeypatch.setattr(scanner, "scan_path", denied)
+    app.scan(scan_params(drive))
+
+    assert window.take_json("onScanDone") == {"error": NO_PERMISSION["read"]}
+    assert "Access is denied" in caplog.text
+
+
 def test_a_failing_scan_reports_the_error_and_frees_the_slot(app, window, drive, monkeypatch):
     first = run_scan(app, window, drive)
     real = scanner.scan_path
@@ -579,7 +647,7 @@ def test_a_failing_scan_reports_the_error_and_frees_the_slot(app, window, drive,
 
     monkeypatch.setattr(scanner, "scan_path", broken)
     app.scan(scan_params(drive))
-    assert window.take_json("onScanDone") == {"error": "disk on fire"}
+    assert window.take_json("onScanDone") == {"error": GENERIC_ERROR}
 
     monkeypatch.setattr(scanner, "scan_path", real)
     assert app._scan_data["id"] == first["scan_id"]
@@ -625,7 +693,7 @@ def test_export_needs_a_writable_output_folder(app, tmp_path, out, monkeypatch):
     reply = app.export({"scan_id": 1, "output_dir": str(out), "selection": {}})
 
     assert reply["success"] is False
-    assert "permission denied" in reply["error"]
+    assert reply["error"] == NO_PERMISSION["write"]
 
 
 @pytest.mark.parametrize("scan_id", [None, 0, 2, "1"])
@@ -875,8 +943,51 @@ def test_a_failing_writer_removes_its_files_and_does_not_stop_the_others(
     )
 
     assert result["success"] is True
-    assert result["errors"] == ["MD: boom"]
+    assert result["errors"] == [f"MD: {GENERIC_ERROR}"]
     assert os.listdir(out) == ["list.json"]
+
+
+def test_export_refuses_an_output_path_that_is_a_file(app, window, drive, tmp_path):
+    scan = run_scan(app, window, drive)
+    target = tmp_path / "readme.txt"
+    target.write_text("x")
+    reply = app.export({
+        "scan_id": scan["scan_id"], "formats": ["MD"], "output_dir": str(target), "selection": {},
+    })
+
+    assert reply == {"success": False, "error": NOT_A_FOLDER}
+    assert target.read_text() == "x"
+
+
+def test_export_explains_an_output_folder_that_cannot_be_checked(
+    app, window, drive, out, monkeypatch, caplog
+):
+    scan = run_scan(app, window, drive)
+
+    def too_long(path):
+        raise OSError(errno.ENAMETOOLONG, "File name too long", str(path))
+
+    monkeypatch.setattr(api, "_folder_state", too_long)
+    reply = app.export({
+        "scan_id": scan["scan_id"], "formats": ["MD"], "output_dir": str(out), "selection": {},
+    })
+
+    assert reply == {"success": False, "error": PATH_TOO_LONG}
+    assert "File name too long" in caplog.text
+
+
+def test_a_write_failure_during_export_shows_a_sentence_and_logs_the_detail(
+    app, window, drive, out, monkeypatch, caplog
+):
+    def disk_full(handle, items, meta, **kwargs):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setitem(exporter.WRITERS, "MD", disk_full)
+    scan = run_scan(app, window, drive)
+    result = run_export(app, window, scan["scan_id"], out, ["MD"])
+
+    assert result["errors"] == [f"MD: {DISK_FULL}"]
+    assert "No space left on device" in caplog.text
 
 
 def test_export_fails_when_every_writer_fails(app, window, drive, out, monkeypatch):
@@ -887,7 +998,7 @@ def test_export_fails_when_every_writer_fails(app, window, drive, out, monkeypat
     scan = run_scan(app, window, drive)
     result = run_export(app, window, scan["scan_id"], out, ["MD"])
 
-    assert result == {"success": False, "saved": [], "errors": ["MD: boom"]}
+    assert result == {"success": False, "saved": [], "errors": [f"MD: {GENERIC_ERROR}"]}
     assert os.listdir(out) == []
 
 
@@ -921,7 +1032,7 @@ def test_an_unexpected_export_error_is_reported_and_frees_the_slot(
         assert app.export({
             "scan_id": scan["scan_id"], "output_dir": str(out), "selection": {},
         }) == {"async": True}
-        assert window.take_json("onExportDone") == {"success": False, "error": "boom"}
+        assert window.take_json("onExportDone") == {"success": False, "error": GENERIC_ERROR}
 
     assert app._exporting is False
     assert run_export(app, window, scan["scan_id"], out)["success"] is True

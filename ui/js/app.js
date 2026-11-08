@@ -753,7 +753,8 @@ function startScan() {
     // Cancel clicked before the scan was registered in Python
     if (result.async && Scan.cancelling) window.pywebview.api.cancel_scan();
   }).catch(e => {
-    abortScan(e?.message ?? String(e));
+    console.error(e);
+    abortScan(UNEXPECTED_ERROR);
   });
 }
 
