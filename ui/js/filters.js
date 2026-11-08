@@ -24,6 +24,7 @@ const CUSTOM_GROUP = 'Custom';
 const Filters = {
   _extState:    {},
   _customExts:  [],   // custom extensions added by user
+  _extCounts:   null, // Map ext -> files in the current scan; null before a scan
   _searchTimer: null,
   _filterTimer: null,
 
@@ -37,6 +38,7 @@ const Filters = {
     } catch (_) {}
     State.activeExts = null;
     this._renderGroups();
+    this.updateCounts();
     this._bindSearch();
     this._bindButtons();
     this._bindCustomExt();
@@ -86,6 +88,7 @@ const Filters = {
     html += this._customGroupHTML();
     container.innerHTML = html;
     this._syncGroupBoxes();
+    this._renderCounts();
 
     container.onclick  = e => this._onClick(e);
     container.onchange = e => this._onChange(e);
@@ -95,8 +98,7 @@ const Filters = {
     return 'grp-body-' + groupName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   },
 
-  _groupHeaderHTML(groupName, count, countId = '') {
-    const idAttr = countId ? ` id="${countId}"` : '';
+  _groupHeaderHTML(groupName) {
     return `
         <div class="grp-header" data-group="${groupName}">
           <button type="button" class="grp-arrow" aria-expanded="false"
@@ -107,13 +109,13 @@ const Filters = {
             <span class="gcb" aria-hidden="true"></span>
           </label>
           <span class="grp-name">${groupName}</span>
-          <span class="grp-count"${idAttr}>${count}</span>
+          <span class="grp-count"></span>
         </div>`;
   },
 
   _groupHTML(groupName, exts) {
     return `
-      <div class="grp">${this._groupHeaderHTML(groupName, exts.length)}
+      <div class="grp">${this._groupHeaderHTML(groupName)}
         <div class="grp-body" id="${this._bodyId(groupName)}" data-grp-body="${groupName}">
           ${exts.map(ext => this._extItemHTML(ext)).join('')}
         </div>
@@ -140,7 +142,7 @@ const Filters = {
   _customGroupHTML() {
     const exts = this._customExts;
     return `
-      <div class="grp" id="grp-custom">${this._groupHeaderHTML(CUSTOM_GROUP, exts.length, 'custom-grp-count')}
+      <div class="grp" id="grp-custom">${this._groupHeaderHTML(CUSTOM_GROUP)}
         <div class="grp-body" id="${this._bodyId(CUSTOM_GROUP)}" data-grp-body="${CUSTOM_GROUP}">
           ${exts.map(ext => this._extItemHTML(ext, true)).join('')}
           ${this._customInputHTML()}
@@ -198,6 +200,31 @@ const Filters = {
     const input = e.target;
     if (input.matches('[data-gcb]'))      this._setGroup(input.dataset.gcb, input.checked);
     else if (input.matches('[data-ecb]')) this._setExt(input.dataset.ecb, input.checked);
+  },
+
+  updateCounts() {
+    const counts = new Map();
+    for (const item of State.treeData) {
+      if (item.type !== 'file') continue;
+      const dot = item.name.lastIndexOf('.');
+      if (dot < 0) continue;
+      const ext = item.name.slice(dot + 1).toLowerCase();
+      counts.set(ext, (counts.get(ext) || 0) + 1);
+    }
+    this._extCounts = counts;
+    this._renderCounts();
+  },
+
+  // A file counts toward every group that lists its extension, as the filter does
+  _renderCounts() {
+    document.querySelectorAll('.grp').forEach(grp => {
+      const name  = grp.querySelector('[data-group]').dataset.group;
+      const total = this._extCounts
+        ? this._extsOf(name).reduce((sum, ext) => sum + (this._extCounts.get(ext) || 0), 0)
+        : null;
+      grp.querySelector('.grp-count').textContent = total === null ? '' : String(total);
+      grp.classList.toggle('grp-empty', total === 0);
+    });
   },
 
   _extsOf(groupName) {
@@ -327,10 +354,7 @@ const Filters = {
       body.insertBefore(item.firstElementChild, form);
     }
 
-    // Update counter
-    const counter = document.getElementById('custom-grp-count');
-    if (counter) counter.textContent = this._customExts.length;
-
+    this._renderCounts();
     this._updateGroupCheckbox(CUSTOM_GROUP);
     this._scheduleRender();
     return true;
@@ -341,8 +365,7 @@ const Filters = {
     delete this._extState[ext];
     const item = document.querySelector(`[data-ext="${cssEscape(ext)}"]`);
     if (item) item.remove();
-    const counter = document.getElementById('custom-grp-count');
-    if (counter) counter.textContent = this._customExts.length;
+    this._renderCounts();
     this._updateGroupCheckbox(CUSTOM_GROUP);
     this._saveCustomExts();
     this._scheduleRender();

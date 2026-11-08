@@ -161,6 +161,7 @@ html {
 }
 .grp-name  { font-size: 12px; font-weight: 500; color: var(--text); flex: 1; }
 .grp-count { font-size: 10px; color: var(--text3); }
+.grp-empty .grp-name { color: var(--text3); font-weight: 400; }
 
 .grp-body {
   padding: 2px 14px 8px 36px;
