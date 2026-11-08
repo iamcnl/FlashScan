@@ -85,20 +85,36 @@ const Filters = {
     // Custom group (may be empty)
     html += this._customGroupHTML();
     container.innerHTML = html;
+    this._syncGroupBoxes();
 
-    container.onclick = e => this._onClick(e);
+    container.onclick  = e => this._onClick(e);
+    container.onchange = e => this._onChange(e);
+  },
+
+  _bodyId(groupName) {
+    return 'grp-body-' + groupName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  },
+
+  _groupHeaderHTML(groupName, count, countId = '') {
+    const idAttr = countId ? ` id="${countId}"` : '';
+    return `
+        <div class="grp-header" data-group="${groupName}">
+          <button type="button" class="grp-arrow" aria-expanded="false"
+                  aria-controls="${this._bodyId(groupName)}" aria-label="${groupName} extensions">▶</button>
+          <label class="gcb-wrap">
+            <input type="checkbox" class="cb-input sr-only" data-gcb="${groupName}"
+                   aria-label="${groupName}: all extensions" checked>
+            <span class="gcb" aria-hidden="true"></span>
+          </label>
+          <span class="grp-name">${groupName}</span>
+          <span class="grp-count"${idAttr}>${count}</span>
+        </div>`;
   },
 
   _groupHTML(groupName, exts) {
     return `
-      <div class="grp">
-        <div class="grp-header" data-group="${groupName}">
-          <span class="grp-arrow">▶</span>
-          <div class="gcb on" data-gcb="${groupName}"></div>
-          <span class="grp-name">${groupName}</span>
-          <span class="grp-count">${exts.length}</span>
-        </div>
-        <div class="grp-body" data-grp-body="${groupName}">
+      <div class="grp">${this._groupHeaderHTML(groupName, exts.length)}
+        <div class="grp-body" id="${this._bodyId(groupName)}" data-grp-body="${groupName}">
           ${exts.map(ext => this._extItemHTML(ext)).join('')}
         </div>
       </div>`;
@@ -106,30 +122,26 @@ const Filters = {
 
   _extItemHTML(ext, removable = false) {
     const e  = escapeHtml(ext);
+    const on = this._extState[ext] === false ? '' : ' checked';
     const rm = removable
-      ? `<span class="ext-rm" data-rm="${e}" title="Remove">×</span>`
+      ? `<button type="button" class="ext-rm" data-rm="${e}" title="Remove" aria-label="Remove .${e}">×</button>`
       : '';
     return `
       <div class="ext-item" data-ext="${e}">
-        <div class="ecb on" data-ecb="${e}"></div>
-        <span class="ext-name">.${e}</span>
+        <label class="ext-label">
+          <input type="checkbox" class="cb-input sr-only" data-ecb="${e}"${on}>
+          <span class="ecb" aria-hidden="true"></span>
+          <span class="ext-name">.${e}</span>
+        </label>
         ${rm}
       </div>`;
   },
 
   _customGroupHTML() {
     const exts = this._customExts;
-    const gcbClass = exts.length === 0 || exts.every(e => this._extState[e])
-      ? 'gcb on' : exts.every(e => !this._extState[e]) ? 'gcb' : 'gcb half';
     return `
-      <div class="grp" id="grp-custom">
-        <div class="grp-header" data-group="${CUSTOM_GROUP}">
-          <span class="grp-arrow">▶</span>
-          <div class="${gcbClass}" data-gcb="${CUSTOM_GROUP}"></div>
-          <span class="grp-name">${CUSTOM_GROUP}</span>
-          <span class="grp-count" id="custom-grp-count">${exts.length}</span>
-        </div>
-        <div class="grp-body" data-grp-body="${CUSTOM_GROUP}">
+      <div class="grp" id="grp-custom">${this._groupHeaderHTML(CUSTOM_GROUP, exts.length, 'custom-grp-count')}
+        <div class="grp-body" id="${this._bodyId(CUSTOM_GROUP)}" data-grp-body="${CUSTOM_GROUP}">
           ${exts.map(ext => this._extItemHTML(ext, true)).join('')}
           ${this._customInputHTML()}
         </div>
@@ -159,14 +171,10 @@ const Filters = {
       return;
     }
 
-    // 1. Checkbox groups
-    const gcbEl = e.target.closest('[data-gcb]');
-    if (gcbEl) {
-      this._toggleGroup(gcbEl.dataset.gcb);
-      return;
-    }
+    // Checkboxes are native inputs, handled by _onChange
+    if (e.target.closest('label')) return;
 
-    // 2. Header → collapse/expand
+    // Header → collapse/expand
     const hdrEl = e.target.closest('[data-group]');
     if (hdrEl) {
       // Open Custom group on first click (so input is visible)
@@ -174,60 +182,63 @@ const Filters = {
       const arrow = hdrEl.querySelector('.grp-arrow');
       if (body) {
         const open = body.classList.toggle('open');
-        if (arrow) arrow.textContent = open ? '▼' : '▶';
+        if (arrow) {
+          arrow.textContent = open ? '▼' : '▶';
+          arrow.setAttribute('aria-expanded', String(open));
+        }
         // After opening, wire up input (DOM just created)
         if (open && hdrEl.dataset.group === CUSTOM_GROUP) {
           this._bindCustomExt();
         }
       }
-      return;
-    }
-
-    // 3. Extension
-    const extEl = e.target.closest('[data-ext]');
-    if (extEl && !e.target.closest('[data-rm]')) {
-      this._toggleExt(extEl.dataset.ext);
     }
   },
 
-  _toggleGroup(groupName) {
-    const exts = groupName === CUSTOM_GROUP
+  _onChange(e) {
+    const input = e.target;
+    if (input.matches('[data-gcb]'))      this._setGroup(input.dataset.gcb, input.checked);
+    else if (input.matches('[data-ecb]')) this._setExt(input.dataset.ecb, input.checked);
+  },
+
+  _extsOf(groupName) {
+    return groupName === CUSTOM_GROUP
       ? this._customExts
       : (ALL_EXTENSIONS[groupName] || []);
-    const allOn  = exts.length > 0 && exts.every(e => this._extState[e]);
-    const newVal = !allOn;
-    exts.forEach(ext => {
-      this._extState[ext] = newVal;
-      const ecb = document.querySelector(`[data-ecb="${cssEscape(ext)}"]`);
-      if (ecb) ecb.classList.toggle('on', newVal);
+  },
+
+  _setGroup(groupName, on) {
+    this._extsOf(groupName).forEach(ext => {
+      this._extState[ext] = on;
+      this._syncExtBoxes(ext);
     });
-    const gcb = document.querySelector(`[data-gcb="${groupName}"]`);
-    if (gcb) gcb.className = newVal ? 'gcb on' : 'gcb';
+    this._syncGroupBoxes();
     this._scheduleRender();
   },
 
-  _toggleExt(ext) {
-    this._extState[ext] = !this._extState[ext];
-    const ecb = document.querySelector(`[data-ecb="${cssEscape(ext)}"]`);
-    if (ecb) ecb.classList.toggle('on', this._extState[ext]);
-    // Update group state
-    const groupName = this._customExts.includes(ext)
-      ? CUSTOM_GROUP
-      : Object.entries(ALL_EXTENSIONS).find(([, v]) => v.includes(ext))?.[0];
-    if (groupName) this._updateGroupCheckbox(groupName);
+  _setExt(ext, on) {
+    this._extState[ext] = on;
+    this._syncExtBoxes(ext);
+    this._syncGroupBoxes();
     this._scheduleRender();
+  },
+
+  // An extension can appear in more than one group, so every matching box is updated
+  _syncExtBoxes(ext) {
+    document.querySelectorAll(`[data-ecb="${cssEscape(ext)}"]`)
+      .forEach(el => { el.checked = !!this._extState[ext]; });
+  },
+
+  _syncGroupBoxes() {
+    [...Object.keys(ALL_EXTENSIONS), CUSTOM_GROUP].forEach(g => this._updateGroupCheckbox(g));
   },
 
   _updateGroupCheckbox(groupName) {
-    const exts = groupName === CUSTOM_GROUP
-      ? this._customExts
-      : (ALL_EXTENSIONS[groupName] || []);
-    const gcb  = document.querySelector(`[data-gcb="${groupName}"]`);
-    if (!gcb || exts.length === 0) return;
-    const vals = exts.map(e => this._extState[e]);
-    const all  = vals.every(Boolean);
-    const none = vals.every(v => !v);
-    gcb.className = all ? 'gcb on' : (none ? 'gcb' : 'gcb half');
+    const gcb = document.querySelector(`[data-gcb="${groupName}"]`);
+    if (!gcb) return;
+    const exts = this._extsOf(groupName);
+    const on   = exts.filter(e => this._extState[e]).length;
+    gcb.checked       = on === exts.length;
+    gcb.indeterminate = on > 0 && on < exts.length;
   },
 
   _scheduleRender() {
@@ -345,16 +356,16 @@ const Filters = {
 
   selectAll() {
     for (const ext of Object.keys(this._extState)) this._extState[ext] = true;
-    document.querySelectorAll('[data-ecb]').forEach(el => el.classList.add('on'));
-    document.querySelectorAll('[data-gcb]').forEach(el => { el.className = 'gcb on'; });
+    document.querySelectorAll('[data-ecb]').forEach(el => { el.checked = true; });
+    document.querySelectorAll('[data-gcb]').forEach(el => { el.checked = true; el.indeterminate = false; });
     State.activeExts = null;
     Tree.invalidate(); Tree.render();
   },
 
   deselectNone() {
     for (const ext of Object.keys(this._extState)) this._extState[ext] = false;
-    document.querySelectorAll('[data-ecb]').forEach(el => el.classList.remove('on'));
-    document.querySelectorAll('[data-gcb]').forEach(el => { el.className = 'gcb'; });
+    document.querySelectorAll('[data-ecb]').forEach(el => { el.checked = false; });
+    document.querySelectorAll('[data-gcb]').forEach(el => { el.checked = false; el.indeterminate = false; });
     State.activeExts = new Set();
     Tree.invalidate(); Tree.render();
   },

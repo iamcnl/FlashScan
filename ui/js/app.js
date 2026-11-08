@@ -93,29 +93,17 @@ const Nav = {
 function initCheckbox(id, stateKey, onChange) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.classList.toggle('on', !!State.settings[stateKey]);
-  const toggle = () => {
-    const val = !el.classList.contains('on');
-    el.classList.toggle('on', val);
-    State.settings[stateKey] = val;
-    window.pywebview?.api?.save_settings({ [stateKey]: val });
-    if (onChange) onChange(val);
-  };
-  const label = el.closest('label');
-  if (label) {
-    // Listen only on the label; stop propagation so the click doesn't
-    // also reach the cb div and fire a second toggle.
-    label.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggle();
-    });
-  } else {
-    el.addEventListener('click', toggle);
-  }
+  el.checked = !!State.settings[stateKey];
+  el.addEventListener('change', () => {
+    State.settings[stateKey] = el.checked;
+    window.pywebview?.api?.save_settings({ [stateKey]: el.checked });
+    if (onChange) onChange(el.checked);
+  });
 }
 
 function setCheckbox(id, on) {
-  document.getElementById(id)?.classList.toggle('on', !!on);
+  const el = document.getElementById(id);
+  if (el) el.checked = !!on;
 }
 
 /* ── Step indicator ── */
@@ -132,16 +120,20 @@ function initSteps() {
 }
 
 /* ── Format cell ── */
+function syncFmtCell(cell) {
+  const on = !!cell.querySelector('.fmt-input')?.checked;
+  cell.classList.toggle('selected', on);
+  cell.querySelector('.fmt-dot')?.classList.toggle('on', on);
+}
+
 function initFmtGrid() {
   document.querySelectorAll('.fmt-cell').forEach(cell => {
-    cell.addEventListener('click', () => {
-      cell.classList.toggle('selected');
-      const dot = cell.querySelector('.fmt-dot');
-      if (dot) dot.classList.toggle('on', cell.classList.contains('selected'));
+    syncFmtCell(cell);
+    cell.querySelector('.fmt-input')?.addEventListener('change', () => {
+      syncFmtCell(cell);
       Export.updateSummary();
       Export.renderNameChips();
-      const fmts = [...document.querySelectorAll('.fmt-cell.selected')].map(c => c.dataset.fmt).filter(Boolean);
-      window.pywebview?.api?.save_settings({ lastFormats: fmts });
+      window.pywebview?.api?.save_settings({ lastFormats: Export._selectedFormats() });
     });
   });
 }
@@ -649,10 +641,9 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (settings.lastOutput) document.getElementById('out-input').value   = settings.lastOutput;
       if (settings.lastFormats) {
         document.querySelectorAll('.fmt-cell').forEach(cell => {
-          const selected = (settings.lastFormats || []).includes(cell.dataset.fmt);
-          cell.classList.toggle('selected', selected);
-          const dot = cell.querySelector('.fmt-dot');
-          if (dot) dot.classList.toggle('on', selected);
+          const input = cell.querySelector('.fmt-input');
+          if (input) input.checked = (settings.lastFormats || []).includes(cell.dataset.fmt);
+          syncFmtCell(cell);
         });
         Export.renderNameChips();
       }
@@ -732,8 +723,8 @@ function startScan() {
 
   document.getElementById('scan-path-error')?.remove();
 
-  const inclHidden = document.getElementById('cb-hidden')?.classList.contains('on') || false;
-  const inclSystem = document.getElementById('cb-system')?.classList.contains('on') || false;
+  const inclHidden = document.getElementById('cb-hidden')?.checked || false;
+  const inclSystem = document.getElementById('cb-system')?.checked || false;
 
   // Show progress
   const wrap = document.getElementById('scan-progress-wrap');
@@ -849,8 +840,8 @@ async function applyScanResult(result) {
     window.pywebview.api.save_settings({
       lastPath:   document.getElementById('path-input')?.value || '',
       lastDepth:  result.depth,
-      inclHidden: document.getElementById('cb-hidden')?.classList.contains('on'),
-      inclSystem: document.getElementById('cb-system')?.classList.contains('on'),
+      inclHidden: document.getElementById('cb-hidden')?.checked,
+      inclSystem: document.getElementById('cb-system')?.checked,
     });
   } catch (e) {}
 }

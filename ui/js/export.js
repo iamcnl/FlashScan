@@ -30,14 +30,9 @@ const Export = {
       });
     }
 
-    // Custom checkbox toggles
     Object.entries(this._optionKeys).forEach(([id, key]) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener('click', () => {
-        const checked = el.dataset.checked !== 'false';
-        this._setOption(el, !checked);
-        window.pywebview?.api?.save_settings({ [key]: !checked });
+      document.getElementById(id)?.addEventListener('change', e => {
+        window.pywebview?.api?.save_settings({ [key]: e.target.checked });
       });
     });
   },
@@ -45,13 +40,8 @@ const Export = {
   applyOptions(settings) {
     Object.entries(this._optionKeys).forEach(([id, key]) => {
       const el = document.getElementById(id);
-      if (el) this._setOption(el, settings[key] !== false);
+      if (el) el.checked = settings[key] !== false;
     });
-  },
-
-  _setOption(el, on) {
-    el.dataset.checked = String(on);
-    el.querySelector('.cb').classList.toggle('on', on);
   },
 
   _defaultStem(fmt) {
@@ -72,15 +62,16 @@ const Export = {
   },
 
   _selectedFormats() {
-    return [...document.querySelectorAll('.fmt-cell.selected')]
+    return [...document.querySelectorAll('.fmt-cell')]
+      .filter(el => el.querySelector('.fmt-input')?.checked)
       .map(el => el.dataset.fmt)
       .filter(Boolean);
   },
 
   _advOptions() {
     return {
-      include_size: document.getElementById('chk-include-size')?.dataset.checked !== 'false',
-      include_date: document.getElementById('chk-include-date')?.dataset.checked !== 'false',
+      include_size: document.getElementById('chk-include-size')?.checked !== false,
+      include_date: document.getElementById('chk-include-date')?.checked !== false,
     };
   },
 

@@ -18,7 +18,7 @@ async function onExportScreen(fn) {
        Nav.unlock(2);
        Nav.go(2);
        document.querySelectorAll('.fmt-cell').forEach(cell =>
-         cell.classList.toggle('selected', cell.dataset.fmt === 'MD'));
+         cell.querySelector('.fmt-input').checked = cell.dataset.fmt === 'MD');
        document.getElementById('out-input').value = '/out';`,
       { tree: TREE },
     );

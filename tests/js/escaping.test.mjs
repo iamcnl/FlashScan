@@ -114,7 +114,7 @@ for (const type of ["file", "folder"]) {
 function renderSummary(app, label, overrides) {
   app.evaluate(
     `document.querySelectorAll('.fmt-cell').forEach(cell =>
-       cell.classList.toggle('selected', ['MD', 'HTML'].includes(cell.dataset.fmt)));
+       cell.querySelector('.fmt-input').checked = ['MD', 'HTML'].includes(cell.dataset.fmt));
      State.volumeLabel = V.label;
      Export._nameOverrides = V.overrides;
      Export.updateSummary();`,

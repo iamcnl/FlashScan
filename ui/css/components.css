@@ -162,11 +162,6 @@
   cursor: pointer;
   transition: background var(--transition), border-color var(--transition);
 }
-.cb.on {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
 /* Extension group checkbox */
 .gcb {
   width: 13px;
@@ -177,8 +172,6 @@
   flex-shrink: 0;
   transition: background var(--transition), border-color var(--transition);
 }
-.gcb.on   { background: var(--accent);       border-color: var(--accent); }
-.gcb.half { background: var(--accent-light); border-color: var(--accent); }
 
 /* Individual extension checkbox */
 .ecb {
@@ -190,7 +183,16 @@
   flex-shrink: 0;
   transition: background var(--transition), border-color var(--transition);
 }
-.ecb.on { background: var(--accent); border-color: var(--accent); }
+
+/* Native checkbox behind the custom box: the input holds the state, the box shows it */
+.cb-input:checked + .cb,
+.cb-input:checked + .gcb,
+.cb-input:checked + .ecb { background: var(--accent); border-color: var(--accent); }
+.cb-input:indeterminate + .gcb { background: var(--accent-light); border-color: var(--accent); }
+.cb-input:focus-visible + .cb,
+.cb-input:focus-visible + .gcb,
+.cb-input:focus-visible + .ecb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gcb-wrap { display: inline-flex; flex-shrink: 0; cursor: pointer; }
 
 /* File checkbox in tree */
 .fcb {
@@ -303,6 +305,7 @@
 
 /* Format cell (export screen) */
 .fmt-cell {
+  position: relative;
   border: 1.5px solid var(--border);
   border-radius: var(--r-md);
   padding: 12px 14px;
@@ -311,6 +314,20 @@
   transition: border-color var(--transition), background var(--transition);
 }
 .fmt-cell:hover     { border-color: var(--border2); }
+.fmt-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+.fmt-input:focus-visible { border-radius: inherit; }
 .fmt-cell.selected  { border-color: var(--accent); background: var(--accent-light); }
 
 .fmt-cell .fmt-top {

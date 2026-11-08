@@ -79,7 +79,7 @@ test("export: nothing selected is refused before the backend is called", async (
     load(app);
     app.evaluate(
       `document.querySelectorAll('.fmt-cell').forEach(cell =>
-         cell.classList.toggle('selected', cell.dataset.fmt === 'MD'));
+         cell.querySelector('.fmt-input').checked = cell.dataset.fmt === 'MD');
        document.getElementById('out-input').value = '/out';
        window.exportCalls = 0;
        window.pywebview.api = { export: async () => { window.exportCalls++; return { async: true }; } };

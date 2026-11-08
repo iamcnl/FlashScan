@@ -99,7 +99,8 @@
             </div>
             <div class="opt-item">
               <label class="cb-row" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <div class="cb" id="cb-hidden"></div>
+                <input type="checkbox" class="cb-input sr-only" id="cb-hidden">
+                <span class="cb" aria-hidden="true"></span>
                 <span style="font-size:12px;color:var(--text2);white-space:nowrap;">hidden files</span>
               </label>
               <span class="tooltip-wrap" style="margin-left:2px;">
@@ -109,7 +110,8 @@
             </div>
             <div class="opt-item">
               <label class="cb-row" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <div class="cb" id="cb-system"></div>
+                <input type="checkbox" class="cb-input sr-only" id="cb-system">
+                <span class="cb" aria-hidden="true"></span>
                 <span style="font-size:12px;color:var(--text2);white-space:nowrap;">system folders</span>
               </label>
               <span class="tooltip-wrap">
@@ -357,32 +359,36 @@
           <span class="field-label" style="margin-bottom:8px;">format</span>
           <div class="fmt-grid" id="fmt-grid">
             <div class="fmt-cell selected" data-fmt="MD">
+              <input type="checkbox" class="fmt-input" aria-labelledby="fmt-name-MD" aria-describedby="fmt-desc-MD" checked>
               <div class="fmt-top">
-                <span class="fmt-name">Markdown</span>
+                <span class="fmt-name" id="fmt-name-MD">Markdown</span>
                 <div class="fmt-dot on"></div>
               </div>
-              <div class="fmt-desc">readable text, headings, bullets</div>
+              <div class="fmt-desc" id="fmt-desc-MD">readable text, headings, bullets</div>
             </div>
             <div class="fmt-cell" data-fmt="HTML">
+              <input type="checkbox" class="fmt-input" aria-labelledby="fmt-name-HTML" aria-describedby="fmt-desc-HTML">
               <div class="fmt-top">
-                <span class="fmt-name">HTML</span>
+                <span class="fmt-name" id="fmt-name-HTML">HTML</span>
                 <div class="fmt-dot"></div>
               </div>
-              <div class="fmt-desc">browser overview, clickable</div>
+              <div class="fmt-desc" id="fmt-desc-HTML">browser overview, clickable</div>
             </div>
             <div class="fmt-cell" data-fmt="JSON">
+              <input type="checkbox" class="fmt-input" aria-labelledby="fmt-name-JSON" aria-describedby="fmt-desc-JSON">
               <div class="fmt-top">
-                <span class="fmt-name">JSON</span>
+                <span class="fmt-name" id="fmt-name-JSON">JSON</span>
                 <div class="fmt-dot"></div>
               </div>
-              <div class="fmt-desc">for scripts and data processing</div>
+              <div class="fmt-desc" id="fmt-desc-JSON">for scripts and data processing</div>
             </div>
             <div class="fmt-cell" data-fmt="TXT">
+              <input type="checkbox" class="fmt-input" aria-labelledby="fmt-name-TXT" aria-describedby="fmt-desc-TXT">
               <div class="fmt-top">
-                <span class="fmt-name">TXT</span>
+                <span class="fmt-name" id="fmt-name-TXT">TXT</span>
                 <div class="fmt-dot"></div>
               </div>
-              <div class="fmt-desc">maximum compatibility</div>
+              <div class="fmt-desc" id="fmt-desc-TXT">maximum compatibility</div>
             </div>
           </div>
         </div>
@@ -393,14 +399,16 @@
             advanced options
           </button>
           <div class="adv-export-body" id="adv-export-body" style="display:none;">
-            <div class="adv-export-check" id="chk-include-size" data-checked="true">
-              <div class="cb on"></div>
+            <label class="adv-export-check">
+              <input type="checkbox" class="cb-input sr-only" id="chk-include-size" checked>
+              <span class="cb" aria-hidden="true"></span>
               <span>include file size</span>
-            </div>
-            <div class="adv-export-check" id="chk-include-date" data-checked="true">
-              <div class="cb on"></div>
+            </label>
+            <label class="adv-export-check">
+              <input type="checkbox" class="cb-input sr-only" id="chk-include-date" checked>
+              <span class="cb" aria-hidden="true"></span>
               <span>include date modified</span>
-            </div>
+            </label>
           </div>
         </div>
 
