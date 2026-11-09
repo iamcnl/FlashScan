@@ -224,6 +224,8 @@
   transition: border-color var(--transition);
 }
 .input:focus { border-color: var(--accent); }
+.input[aria-invalid="true"],
+.input[aria-invalid="true"]:focus { border-color: var(--danger); }
 
 /* Search */
 .search {

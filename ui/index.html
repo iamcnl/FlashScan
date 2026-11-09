@@ -122,9 +122,12 @@
           </div>
         </div>
 
-        <div id="scan-progress-wrap" style="display:none;flex-direction:column;gap:6px;">
-          <div class="progress"><div class="progress-fill animated" id="scan-progress-bar"></div></div>
-          <span class="scan-status" id="scan-status-text">Scanning…</span>
+        <div class="scan-slot">
+          <div id="scan-progress-wrap" style="display:none;flex-direction:column;gap:6px;">
+            <div class="progress"><div class="progress-fill animated" id="scan-progress-bar"></div></div>
+            <span class="scan-status" id="scan-status-text">Scanning…</span>
+          </div>
+          <p class="scan-error-msg" id="scan-path-error" role="alert"></p>
         </div>
 
         <div class="scan-footer">

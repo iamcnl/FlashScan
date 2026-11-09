@@ -455,6 +455,9 @@ html {
   outline: none;
 }
 .depth-input:focus { border-color: var(--accent); }
+.depth-input[aria-invalid="true"],
+.depth-input[aria-invalid="true"]:focus { border-color: var(--danger); }
+.scan-slot   { min-height: calc(2 * 1.35 * 12px); }
 .scan-footer  { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .scan-actions { display: flex; gap: 8px; }
 .scan-status  { font-size: 11px; color: var(--text3); font-family: var(--font-mono); }

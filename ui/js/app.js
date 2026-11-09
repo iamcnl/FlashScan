@@ -599,7 +599,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-browse')?.addEventListener('click', async () => {
     try {
       const path = await window.pywebview.api.browse_directory();
-      if (path) document.getElementById('path-input').value = path;
+      if (path) {
+        document.getElementById('path-input').value = path;
+        clearScanError();
+      }
     } catch (e) { console.error(e); }
   });
 
@@ -608,6 +611,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('path-input')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') startScan();
   });
+  SCAN_FIELDS.forEach(id => document.getElementById(id)?.addEventListener('input', clearScanError));
 
   // Scan checkboxes
   initCheckbox('cb-hidden', 'inclHidden');
@@ -660,12 +664,26 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* ── Inline error message (replacement for alert()) ── */
-function showScanError(msgs) {
-  document.getElementById('scan-path-error')?.remove();
+const SCAN_FIELDS = ['path-input', 'depth-input'];
+
+function fieldOf(msg) {
+  return /depth/i.test(msg) ? 'depth-input' : 'path-input';
+}
+
+function clearScanError() {
+  document.getElementById('scan-path-error')?.replaceChildren();
+  SCAN_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    el?.removeAttribute('aria-invalid');
+    el?.removeAttribute('aria-describedby');
+  });
+}
+
+function showScanError(msgs, fields = []) {
+  clearScanError();
+  const err = document.getElementById('scan-path-error');
+  if (!err) return;
   const list = Array.isArray(msgs) ? msgs : [msgs];
-  const err = document.createElement('p');
-  err.id = 'scan-path-error';
-  err.className = 'scan-error-msg';
   list.forEach((m, i) => {
     if (i > 0) err.append(document.createElement('br'));
     if (i === 0) {
@@ -679,8 +697,13 @@ function showScanError(msgs) {
     }
     err.append(String(m));
   });
-  const footer = document.querySelector('.scan-footer');
-  footer?.insertAdjacentElement('beforebegin', err);
+  const invalid = SCAN_FIELDS.filter(id => fields.includes(id));
+  invalid.forEach(id => {
+    const el = document.getElementById(id);
+    el?.setAttribute('aria-invalid', 'true');
+    el?.setAttribute('aria-describedby', 'scan-path-error');
+  });
+  document.getElementById(invalid[0])?.focus();
 }
 
 /* ── Scan run state ── */
@@ -699,13 +722,13 @@ function setScanBusy(busy) {
 }
 
 /* ── Abort progress state on error ── */
-function abortScan(msg) {
+function abortScan(msg, fields) {
   const wrap = document.getElementById('scan-progress-wrap');
   const bar  = document.getElementById('scan-progress-bar');
   if (bar)  bar.classList.remove('animated');
   if (wrap) wrap.style.display = 'none';
   setScanBusy(false);
-  showScanError(msg);
+  showScanError(msg, fields);
 }
 
 /* ── Scanning ── */
@@ -717,11 +740,15 @@ function startScan() {
   const depth = parseInt(depthRaw);
 
   const errs = [];
-  if (!path) errs.push('Enter a path.');
-  if (!depthRaw || isNaN(depth) || depth < 1 || depth > 50) errs.push('Depth must be a number between 1 and 50.');
-  if (errs.length) { showScanError(errs); return; }
+  const fields = [];
+  if (!path) { errs.push('Enter a path.'); fields.push('path-input'); }
+  if (!depthRaw || isNaN(depth) || depth < 1 || depth > 50) {
+    errs.push('Depth must be a number between 1 and 50.');
+    fields.push('depth-input');
+  }
+  if (errs.length) { showScanError(errs, fields); return; }
 
-  document.getElementById('scan-path-error')?.remove();
+  clearScanError();
 
   const inclHidden = document.getElementById('cb-hidden')?.checked || false;
   const inclSystem = document.getElementById('cb-system')?.checked || false;
@@ -741,11 +768,11 @@ function startScan() {
     path, depth, incl_hidden: inclHidden, incl_system: inclSystem
   }).then(result => {
     if (result.errors) {
-      abortScan(result.errors);
+      abortScan(result.errors, result.errors.map(fieldOf));
       return;
     }
     if (result.error) {
-      abortScan(result.error);
+      abortScan(result.error, ['path-input']);
       return;
     }
     // result.busy: a scan is already running, the UI keeps showing it
