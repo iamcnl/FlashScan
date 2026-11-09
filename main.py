@@ -69,6 +69,7 @@ def main():
         min_size   = (760, 520),
         resizable  = True,
         frameless  = False,  # True = hide native titlebar (GUI has its own drag bar)
+        maximized  = True,
         hidden     = True,
     )
     window_ref.append(window)

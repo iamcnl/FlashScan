@@ -196,7 +196,6 @@ class API:
             log.warning("UI did not report ready in time; revealing the window anyway")
         win = self._window
         if win:
-            win.maximize()
             win.show()
 
     # ── Dialogs ───────────────────────────────────────────────────

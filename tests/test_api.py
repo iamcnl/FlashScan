@@ -1104,7 +1104,7 @@ def test_reveal_shows_the_window_once(app, window):
     app.reveal(ui_reported=True)
     app.reveal(ui_reported=True)
 
-    assert (window.maximized, window.shown) == (1, 1)
+    assert (window.maximized, window.shown) == (0, 1)
 
 
 def test_ui_ready_reveals_without_a_warning(app, window, caplog):
