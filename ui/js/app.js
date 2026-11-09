@@ -85,6 +85,8 @@ const Nav = {
     this._maxReached = 0;
     const el = document.getElementById('export-result');
     if (el) el.style.display = 'none';
+    const page = document.querySelector('.export-page');
+    if (page) page.scrollTop = 0;
     this.go(0);
   },
 };

@@ -465,15 +465,18 @@ html {
 /* ── Screen 2: Export ── */
 .export-page {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: var(--sp-8) var(--sp-8);
 }
 .export-card {
   width: 100%;
   max-width: 500px;
+  flex-shrink: 0;
+  margin-block: auto;
   background: var(--card);
   border-radius: var(--r-card);
   border: 1px solid var(--border);

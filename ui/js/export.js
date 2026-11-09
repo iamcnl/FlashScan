@@ -245,7 +245,7 @@ const Export = {
     const txt  = document.getElementById('export-status-text');
     if (running) {
       if (btn)  { btn.disabled = true; btn.textContent = 'Exporting…'; }
-      if (wrap) wrap.style.display = 'flex';
+      if (wrap) { wrap.style.display = 'flex'; this._reveal(wrap); }
       if (bar)  { bar.style.width = ''; bar.classList.add('animated'); }
       if (txt)  txt.textContent = 'Preparing…';
       const exportResult = document.getElementById('export-result');
@@ -278,12 +278,17 @@ const Export = {
     }
   },
 
+  _reveal(el) {
+    el.scrollIntoView?.({ block: 'nearest' });
+  },
+
   _showResult(msg, type) {
     const el = document.getElementById('export-result');
     if (!el) return;
     el.style.display = '';
     el.className     = `export-result ${type}`;
     el.textContent   = msg;
+    this._reveal(el);
   },
 
   _showResultFiles(saved, errors) {
@@ -318,6 +323,7 @@ const Export = {
     });
 
     document.getElementById('btn-new-scan')?.addEventListener('click', () => Nav.reset());
+    this._reveal(el);
   },
 };
 
