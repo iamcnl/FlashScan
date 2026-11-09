@@ -35,6 +35,8 @@ DEFAULTS: dict = {
     "theme":       "light",
     "sortCol":     "name",
     "sortDir":     "asc",
+    "windowMaximized": True,
+    "windowBounds": None,
 }
 
 _lock = threading.RLock()

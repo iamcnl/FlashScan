@@ -20,6 +20,8 @@ import logger
 
 logger.setup()
 
+import window_state
+
 import webview
 
 from ui.api import API
@@ -60,18 +62,19 @@ def main():
     window_ref: list = []
     api = API(window_ref)
 
+    options = window_state.startup_options(window_state.current_screens())
     window = webview.create_window(
         title      = "FlashScan",
         url        = str(UI_HTML),
         js_api     = api,
-        width      = 1000,
-        height     = 680,
-        min_size   = (760, 520),
+        min_size   = window_state.MIN_SIZE,
         resizable  = True,
         frameless  = False,  # True = hide native titlebar (GUI has its own drag bar)
-        maximized  = True,
         hidden     = True,
+        **options,
     )
+    tracker = window_state.Tracker(options["maximized"], window_state.saved_bounds())
+    tracker.attach(window.events)
     window_ref.append(window)
 
     def on_started():
@@ -80,6 +83,7 @@ def main():
         reveal_timer.start()
 
     webview.start(on_started, debug=False, icon=str(ICON))
+    tracker.flush()
     log.info("FlashScan closed")
 
 
