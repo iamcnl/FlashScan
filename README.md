@@ -123,3 +123,18 @@ FlashScan writes a rotating log file (up to 4 MB in total). If a scan or export 
 The log is at `%APPDATA%\FlashScan\flashscan.log`.
 
 The log contains the scanned folder path, the output folder and paths of unreadable entries, so check it before sharing if those are private.
+
+---
+
+## Privacy
+
+FlashScan works offline. It has no telemetry, no analytics, no update check and no account and the interface makes no network requests: the Inter font is bundled, and exported HTML files are self-contained.
+
+- **Stays on your computer:** your settings (`~/.flashscan_settings.json`), the per-drive memory (`~/.flashscan_profiles/`), the log (`%APPDATA%\FlashScan\flashscan.log`) and the files you export.
+- **WebView2:** the window is rendered by the Microsoft Edge WebView2 Runtime, which is a Microsoft component that updates itself and is governed by Microsoft's own settings, not by FlashScan.
+
+---
+
+## License
+
+FlashScan is released under the [MIT License](LICENSE).

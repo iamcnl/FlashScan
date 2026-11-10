@@ -25,6 +25,7 @@ import window_state
 import webview
 
 from ui.api import API
+from version import __version__
 
 log = logging.getLogger(__name__)
 
@@ -55,8 +56,8 @@ def main():
     _set_app_user_model_id()
     log.info("icon: %s (exists=%s)", ICON, ICON.is_file())
     log.info(
-        "FlashScan starting: python %s, %s, pywebview %s",
-        platform.python_version(), platform.platform(), _pywebview_version(),
+        "FlashScan %s starting: python %s, %s, pywebview %s",
+        __version__, platform.python_version(), platform.platform(), _pywebview_version(),
     )
     # window_ref_holder: list with one element, populated after create_window
     window_ref: list = []

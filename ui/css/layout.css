@@ -401,8 +401,10 @@ html {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--sp-10) var(--sp-8);
+  justify-content: safe center;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-8);
 }
 .scan-page h1 {
   font-size: 20px;
@@ -414,8 +416,20 @@ html {
 .scan-page .subtitle {
   font-size: 13px;
   color: var(--text2);
-  margin-bottom: var(--sp-8);
+  margin-bottom: var(--sp-5);
 }
+.scan-credit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+  font-size: 12px;
+  color: var(--text3);
+}
+.scan-credit .link-btn { color: var(--text2); }
+.scan-credit .gh-btn   { margin-left: var(--sp-4); }
 .scan-card {
   width: 100%;
   max-width: 460px;

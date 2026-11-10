@@ -14,6 +14,7 @@ import pytest
 import exporter
 import scanner
 import settings
+import version
 from friendly_errors import (
     DISK_FULL, GENERIC_ERROR, NO_ASSOCIATION, NO_PERMISSION, NOT_A_FOLDER, PATH_TOO_LONG,
 )
@@ -1204,3 +1205,42 @@ def test_scan_log_summarises_issues_and_caps_the_details(caplog, monkeypatch):
     assert "Link not followed (folder): /d/l1 -> /t1" in text
     assert "/d/l2" not in text
     assert "... and 1 more links" in text
+
+def test_get_about_reports_the_app_version(app):
+    assert app.get_about() == {"version": version.__version__}
+
+
+def test_every_known_link_is_https():
+    assert version.LINKS
+    assert all(url.startswith("https://") for url in version.LINKS.values())
+
+
+def test_open_external_opens_each_known_link_in_the_browser(app, monkeypatch):
+    opened = []
+    monkeypatch.setattr(api.webbrowser, "open", lambda url: opened.append(url) or True)
+    for key in version.LINKS:
+        assert app.open_external(key) == {"ok": True}
+    assert opened == list(version.LINKS.values())
+
+
+@pytest.mark.parametrize("key", ["https://example.com", "", "GITHUB", None, 5])
+def test_open_external_refuses_anything_but_a_known_key(app, monkeypatch, key):
+    opened = []
+    monkeypatch.setattr(api.webbrowser, "open", lambda url: opened.append(url) or True)
+    assert app.open_external(key) == {"error": "Unknown link."}
+    assert opened == []
+
+
+def test_open_external_reports_a_missing_browser(app, monkeypatch):
+    monkeypatch.setattr(api.webbrowser, "open", lambda url: False)
+    assert app.open_external("github") == {"error": "No web browser could be opened."}
+
+
+def test_open_external_hides_unexpected_failures_but_logs_them(app, monkeypatch, caplog):
+    def boom(url):
+        raise RuntimeError("secret detail")
+
+    monkeypatch.setattr(api.webbrowser, "open", boom)
+    result = app.open_external("site")
+    assert "secret detail" not in result["error"]
+    assert "secret detail" in caplog.text

@@ -211,22 +211,55 @@ const ConfirmDialog = {
   },
 };
 
-/* ── Settings dialog ── */
+/* ── Settings and About dialogs ── */
+function modalDialog(title, id) {
+  const dialog = modalEl('div', 'modal');
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.setAttribute('aria-labelledby', id);
+  const heading = modalEl('h2', 'modal-title', title);
+  heading.id = id;
+  dialog.append(heading);
+  return dialog;
+}
+
+function showModal(dialog, initialFocus, onClosed) {
+  const backdrop = modalEl('div', 'modal-backdrop');
+  backdrop.append(dialog);
+  const previousFocus = document.activeElement;
+  document.body.append(backdrop);
+  initialFocus.focus();
+
+  const finish = () => {
+    window.removeEventListener('keydown', onKey, true);
+    backdrop.remove();
+    onClosed();
+    previousFocus?.focus?.();
+  };
+  // Capture phase on window: the tree's shortcuts must not fire behind the dialog.
+  const onKey = e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      finish();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      const items = [...dialog.querySelectorAll('select, button')];
+      const at    = Math.max(items.indexOf(document.activeElement), 0);
+      items[(at + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
+    }
+  };
+  window.addEventListener('keydown', onKey, true);
+  backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) finish(); });
+  return finish;
+}
+
 const SettingsDialog = {
   _open: false,
 
   open() {
     if (this._open || ConfirmDialog._open) return;
     this._open = true;
-
-    const backdrop = modalEl('div', 'modal-backdrop');
-    const dialog   = modalEl('div', 'modal');
-    dialog.setAttribute('role', 'dialog');
-    dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-labelledby', 'settings-title');
-
-    const heading = modalEl('h2', 'modal-title', 'Settings');
-    heading.id = 'settings-title';
 
     const select = modalEl('select', 'adv-select');
     select.id = 'settings-date-format';
@@ -252,33 +285,11 @@ const SettingsDialog = {
     const actions = modalEl('div', 'modal-actions');
     actions.append(close);
 
-    dialog.append(heading, field, preview, actions);
-    backdrop.append(dialog);
+    const dialog = modalDialog('Settings', 'settings-title');
+    dialog.append(field, preview, actions);
+    const finish = showModal(dialog, select, () => { this._open = false; });
 
-    const previousFocus = document.activeElement;
-    document.body.append(backdrop);
-    select.focus();
-
-    const finish = () => {
-      window.removeEventListener('keydown', onKey, true);
-      backdrop.remove();
-      this._open = false;
-      previousFocus?.focus?.();
-    };
-    // Capture phase on window: the tree's shortcuts must not fire behind the dialog.
-    const onKey = e => {
-      e.stopPropagation();
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        finish();
-      } else if (e.key === 'Tab') {
-        e.preventDefault();
-        (document.activeElement === select ? close : select).focus();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
     close.addEventListener('click', finish);
-    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) finish(); });
     select.addEventListener('change', () => {
       DateFmt.setMode(select.value);
       State.settings.dateFormat = DateFmt.mode;
@@ -290,7 +301,72 @@ const SettingsDialog = {
   },
 };
 
+function appIcon() {
+  const make = (tag, attrs) => {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.entries(attrs).forEach(([name, value]) => node.setAttribute(name, value));
+    return node;
+  };
+  const svg = make('svg', { viewBox: '0 0 256 256', 'aria-hidden': 'true' });
+  svg.append(
+    make('rect', { width: 256, height: 256, rx: 58, fill: '#2d3b2e' }),
+    make('path', {
+      d: 'M58 92a14 14 0 0 1 14-14h24a12 12 0 0 1 9 4l11 12h76a14 14 0 0 1 14 14v75a14 14 0 0 1-14 14H72a14 14 0 0 1-14-14z',
+      fill: 'none', stroke: '#f0ede6', 'stroke-width': 10, 'stroke-linejoin': 'round',
+    }),
+    make('path', { d: 'M35 147h186', stroke: '#8fb897', 'stroke-width': 9, 'stroke-linecap': 'round' }),
+  );
+  return svg;
+}
+
+const AboutDialog = {
+  _open: false,
+  LINKS: [['issues', 'Report an issue'], ['license', 'MIT licence']],
+
+  open() {
+    if (this._open || ConfirmDialog._open) return;
+    this._open = true;
+
+    const dialog  = modalDialog('FlashScan', 'about-title');
+    const icon    = modalEl('span', 'about-icon');
+    icon.append(appIcon());
+    const version = modalEl('p', 'modal-text');
+    version.hidden = true;
+    const title = modalEl('div');
+    title.append(dialog.firstChild, version);
+    const head = modalEl('div', 'about-head');
+    head.append(icon, title);
+
+    const note  = modalEl('p', 'modal-text', 'Works offline and sends nothing anywhere.');
+    const links = modalEl('div', 'modal-links');
+    this.LINKS.forEach(([key, text]) => {
+      const button = modalEl('button', 'link-btn', text);
+      button.type = 'button';
+      button.dataset.link = key;
+      links.append(button);
+    });
+
+    const close   = modalEl('button', 'btn btn-secondary', 'Close');
+    close.type = 'button';
+    const actions = modalEl('div', 'modal-actions');
+    actions.append(close);
+
+    dialog.append(head, note, links, actions);
+    window.pywebview?.api?.get_about?.()
+      ?.then(info => {
+        if (!info?.version) return;
+        version.textContent = `Version ${info.version}`;
+        version.hidden = false;
+      })
+      .catch(() => {});
+
+    const finish = showModal(dialog, close, () => { this._open = false; });
+    close.addEventListener('click', finish);
+  },
+};
+
 document.getElementById('btn-open-settings')?.addEventListener('click', () => SettingsDialog.open());
+document.getElementById('btn-about')?.addEventListener('click', () => AboutDialog.open());
 
 /* ── Drive profile note (status bar) ── */
 /* ── Scan issues banner: unreadable entries, links and the depth limit ── */
@@ -945,6 +1021,16 @@ const Theme = {
 };
 
 Theme.init();
+
+document.addEventListener('click', async e => {
+  const link = e.target.closest?.('[data-link]');
+  if (!link) return;
+  e.preventDefault();
+  try {
+    const r = await window.pywebview?.api?.open_external(link.dataset.link);
+    if (r?.error) console.error('Cannot open link: ' + r.error);
+  } catch (err) { console.error(err); }
+});
 
 document.getElementById('btn-open-log')?.addEventListener('click', async () => {
   try {

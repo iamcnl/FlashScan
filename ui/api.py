@@ -10,6 +10,7 @@ Responsible for:
   - dialogs (browse_directory)
   - settings (get/save) and per-drive profiles
   - window reveal once the UI has applied its settings
+  - About data and opening the known project links in the default browser
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import re
 import stat
 import subprocess
 import threading
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +32,7 @@ import webview  # pywebview
 
 import logger
 import settings
+from version import LINKS, __version__
 from friendly_errors import (
     ERROR_FILENAME_EXCED_RANGE, NO_PERMISSION, NOT_A_FOLDER, describe_error,
 )
@@ -41,6 +44,7 @@ MAX_LOGGED_LINKS = 20
 
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _DENIED = {"error": "Path is outside the scanned folders."}
+_UNKNOWN_LINK = {"error": "Unknown link."}
 _EXPORT_EXTS = {"MD": ".md", "TXT": ".txt", "JSON": ".json", "HTML": ".html"}
 
 
@@ -181,6 +185,22 @@ class API:
             return {"error": "No log file is available."}
         self._trust_file(str(path))
         return self.reveal_in_explorer(str(path))
+
+    # ── About ─────────────────────────────────────────────────────
+
+    def get_about(self) -> dict:
+        return {"version": __version__}
+
+    def open_external(self, key: str) -> dict:
+        """Opens one of the known project links (version.LINKS) in the default browser. Takes a key, never a URL."""
+        url = LINKS.get(key) if isinstance(key, str) else None
+        if url is None:
+            return _UNKNOWN_LINK
+        try:
+            opened = webbrowser.open(url)
+        except Exception as e:
+            return _failure("open_external", e)
+        return {"ok": True} if opened else {"error": "No web browser could be opened."}
 
     # ── Window ────────────────────────────────────────────────────
 
