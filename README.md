@@ -53,7 +53,7 @@ Download `FlashScan.exe` from the [latest release](https://github.com/iamcnl/Fla
   - Filter files by extension, with pre-defined categories and support for custom extensions.
   - Full-text search for files and folders.
   - Advanced filters for category, file size, and modification date.
-  - Bulk actions like select/deselect all, and three-state folder-level management (include all, name only, or skip).
+  - Bulk actions like select/deselect all, and three-state folder-level management (all, names only, or excluded).
 - **Multiple Export Formats**:
   - **HTML**: A self-contained, interactive report with collapsible sections, color-coded file types, and a dark/light theme toggle.
 
@@ -66,7 +66,7 @@ Download `FlashScan.exe` from the [latest release](https://github.com/iamcnl/Fla
 - **Keyboard Shortcuts**: Full keyboard navigation for power users (see [Keyboard Shortcuts](#keyboard-shortcuts)).
 - **Persistent Settings**: Remembers your last used paths, theme, sorting, and scan options between sessions.
 - **Date Format**: The gear icon in the title bar sets how dates appear in the file list and in exports. It follows your system's regional format by default, with `dd. mm. yyyy`, `mm/dd/yyyy` and `yyyy-mm-dd` as alternatives.
-- **Drive Memory**: Remembers folder notes, folder states (name only / skip), excluded files, and expanded folders for each drive, so rescanning a flash drive restores your selection even if its drive letter changes.
+- **Drive Memory**: Remembers folder notes, folder states (names only / excluded), excluded files, and expanded folders for each drive, so rescanning a flash drive restores your selection even if its drive letter changes.
 - **Link Handling**: Symlinks and NTFS junctions are never followed, so they can't cause loops or list files twice. They are reported, with their targets, in the scan issues banner.
 
 ---
@@ -76,7 +76,7 @@ Download `FlashScan.exe` from the [latest release](https://github.com/iamcnl/Fla
 The application guides you through a simple three-step process:
 
 1. **Scan**: Select a folder or disk to scan. Configure scan depth and whether to include hidden or system files. A progress bar shows scan status.
-2. **Select Files**: Browse the interactive file tree. Use the extension sidebar, search bar, or advanced filters to narrow down files. Manage folders with three-state selection (full / name only / skip). The status bar shows a running total of selected files and their combined size.
+2. **Select Files**: Browse the interactive file tree. Use the extension sidebar, search bar, or advanced filters to narrow down files. Manage folders with three-state selection (all / names only / excluded). The status bar shows a running total of selected files and their combined size.
 3. **Export**: Choose one or more output formats, specify a save location, and generate the report.
 
 ---
@@ -98,7 +98,7 @@ These shortcuts are active in the file tree on Step 2.
 | `Home` / `End` | Focus the first / last row |
 | `→` | Expand the focused folder; if already open, move to its first child |
 | `←` | Collapse the focused folder; otherwise move to its parent |
-| `Space` | Toggle file selection; cycle folder state (full → name only → skip) |
+| `Space` | Toggle file selection; cycle folder state (all → names only → excluded) |
 | `Enter` | Toggle file selection; collapse / expand the focused folder |
 | `Shift+Click` | Range-select files |
 | `Enter` *(path input)* | Start scan |

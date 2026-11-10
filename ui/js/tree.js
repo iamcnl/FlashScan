@@ -31,18 +31,22 @@ const EXT_ICON = {
 };
 
 const PILLS = [
-  { state:'full',    cls:'pill-full',    icon: IC.ckG,   label:'all' },
-  { state:'name',    cls:'pill-name',    icon: IC.listI, label:'name only' },
-  { state:'skip',    cls:'pill-skip',    icon: IC.cross, label:'skip' },
-  { state:'partial', cls:'pill-partial', icon: IC.partI, label:'partial' },
+  { state:'full',    cls:'pill-full',    icon: IC.ckG,   label:'all',        hint:'All files in this folder are included' },
+  { state:'name',    cls:'pill-name',    icon: IC.listI, label:'names only', hint:'Only the folder name is listed; its contents are left out' },
+  { state:'skip',    cls:'pill-skip',    icon: IC.cross, label:'excluded',   hint:'The folder and its contents are left out of the export' },
+  { state:'partial', cls:'pill-partial', icon: IC.partI, label:'some',       hint:'Only part of the contents is included' },
 ];
 
 const STATE_SPOKEN = {
   full:    'all files included',
   name:    'names only',
-  skip:    'skipped',
-  partial: 'partly included',
+  skip:    'excluded',
+  partial: 'some included',
 };
+
+function namesOnlyLabel(count) {
+  return `${count} ${count === 1 ? 'folder' : 'folders'}: names only`;
+}
 
 function fmtSize(b) {
   if (!b)             return '';
@@ -65,7 +69,7 @@ function getExt(name) {
 }
 function pillHtml(state) {
   const p = PILLS.find(x => x.state === state) || PILLS[0];
-  return `<span class="pill ${p.cls}" data-pill aria-hidden="true">${p.icon}${p.label}</span>`;
+  return `<span class="pill ${p.cls}" data-pill title="${p.hint}" aria-hidden="true">${p.icon}${p.label}</span>`;
 }
 
 /* ═══════════════════════════════════════════════════════════ */
@@ -942,7 +946,7 @@ const Tree = {
     const nameSep = $('stat-name-sep');
     if (nameEl && nameSep) {
       if (nameOnly > 0) {
-        nameEl.textContent = `${nameOnly} folders name only`;
+        nameEl.textContent = namesOnlyLabel(nameOnly);
         nameEl.style.display = nameSep.style.display = '';
       } else {
         nameEl.style.display = nameSep.style.display = 'none';

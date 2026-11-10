@@ -496,7 +496,7 @@ const ProfileNote = {
       intro: `This clears what FlashScan remembers about ${info.label ? `\u201C${info.label}\u201D` : 'this drive'}:`,
       items: [
         info.notes    && c(info.notes,    'folder note',                                'folder notes'),
-        info.folders  && c(info.folders,  'folder set to names only or skipped',        'folders set to names only or skipped'),
+        info.folders  && c(info.folders,  'folder set to names only or excluded',       'folders set to names only or excluded'),
         info.files    && c(info.files,    'excluded file',                              'excluded files'),
         info.expanded && c(info.expanded, 'expanded folder',                            'expanded folders'),
         info.unseen   && c(info.unseen,   'saved entry for folders outside this scan',  'saved entries for folders outside this scan'),

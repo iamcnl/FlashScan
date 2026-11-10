@@ -95,7 +95,7 @@ const Export = {
 
     const parts = [`<strong>${count} files</strong>`];
     if (size)     parts.push(fmtSize(size));
-    if (nameOnly) parts.push(`${nameOnly} folders name only`);
+    if (nameOnly) parts.push(namesOnlyLabel(nameOnly));
     if (empty)    parts.push('<span class="export-warn">⚠ nothing selected to export</span>');
     if (fmts.length) parts.push(`format: <strong>${escapeHtml(fmts.join(', '))}</strong>`);
     else             parts.push('<span class="export-warn">⚠ no format selected</span>');

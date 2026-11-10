@@ -66,9 +66,9 @@ const ContextMenu = (() => {
       html += _row('sel-all',    ICONS.selAll,    'Select all in folder');
       html += _row('desel-all',  ICONS.deselAll,  'Deselect all in folder');
       html += `<div class="ctx-divider-inner"></div>`;
-      html += _rowCheck('state-full', ICONS.stateFull, 'Full (contents & names)', curState === 'full');
-      html += _rowCheck('state-name', ICONS.stateName, 'Folder name only',        curState === 'name');
-      html += _rowCheck('state-skip', ICONS.stateSkip, 'Skip folder',             curState === 'skip');
+      html += _rowCheck('state-full', ICONS.stateFull, 'All (contents & names)', curState === 'full');
+      html += _rowCheck('state-name', ICONS.stateName, 'Names only (no contents)', curState === 'name');
+      html += _rowCheck('state-skip', ICONS.stateSkip, 'Exclude folder',          curState === 'skip');
       html += `</div>`;
     }
 
