@@ -54,7 +54,6 @@ def _set_app_user_model_id() -> None:
 
 def main():
     _set_app_user_model_id()
-    log.info("icon: %s (exists=%s)", ICON, ICON.is_file())
     log.info(
         "FlashScan %s starting: python %s, %s, pywebview %s",
         __version__, platform.python_version(), platform.platform(), _pywebview_version(),

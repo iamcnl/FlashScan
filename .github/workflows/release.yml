@@ -17,6 +17,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check version matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $match = Select-String -Path version.py -Pattern '^__version__\s*=\s*"([^"]+)"'
+          if (-not $match) { throw "__version__ not found in version.py" }
+          $version = $match.Matches[0].Groups[1].Value
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            throw "version.py is $version but the tag is ${{ github.ref_name }}"
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
