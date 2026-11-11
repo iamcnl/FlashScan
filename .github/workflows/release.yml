@@ -27,7 +27,7 @@ jobs:
           if ("v$version" -ne "${{ github.ref_name }}") {
             throw "version.py is $version but the tag is ${{ github.ref_name }}"
           }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
           cache: pip
