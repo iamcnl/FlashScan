@@ -99,14 +99,20 @@ const State = {
     const tree = this.treeData;
     if (this._structure?.tree === tree && this._structure.size === tree.length) return this._structure;
     const parent = new Int32Array(tree.length).fill(-1);
+    const end    = new Int32Array(tree.length);   // end[i]: first index after item i's subtree
     const index  = new Map();
     const lastAt = [];
+    const open   = [];
+    let files = 0;
     tree.forEach((item, i) => {
       index.set(item.path, i);
+      while (open.length && tree[open[open.length - 1]].lvl >= item.lvl) end[open.pop()] = i;
       if (item.lvl > 0) parent[i] = lastAt[item.lvl - 1] ?? -1;
-      if (item.type === 'folder') lastAt[item.lvl] = i;
+      if (item.type === 'folder') { lastAt[item.lvl] = i; open.push(i); }
+      else { end[i] = i + 1; files++; }
     });
-    this._structure = { tree, size: tree.length, parent, index };
+    for (const i of open) end[i] = tree.length;
+    this._structure = { tree, size: tree.length, parent, end, index, files };
     return this._structure;
   },
 
@@ -116,13 +122,6 @@ const State = {
     return i === undefined || parent[i] < 0 ? null : this.treeData[parent[i]].path;
   },
 
-  _subtreeEnd(i) {
-    const tree = this.treeData;
-    let j = i + 1;
-    while (j < tree.length && tree[j].lvl > tree[i].lvl) j++;
-    return j;
-  },
-
   // ── Selection changes ─────────────────────────────────────────
   // Every change to files or folders goes through these two, so a folder's state always
   // follows from its contents and from the folders above it.
@@ -130,7 +129,7 @@ const State = {
     const i = this.structure().index.get(path);
     if (i === undefined) return;
     this.folderStates[path] = state;
-    for (let j = i + 1, end = this._subtreeEnd(i); j < end; j++) {
+    for (let j = i + 1, end = this.structure().end[i]; j < end; j++) {
       const item = this.treeData[j];
       if (item.type === 'folder') this.folderStates[item.path] = state;
       else if (state === 'full')  this.selectedFiles.add(item.path);
@@ -142,26 +141,24 @@ const State = {
 
   setFilesSelected(paths, selected) {
     const { parent, index } = this.structure();
-    const parents = new Set();
+    const touched = new Set();
     for (const path of paths) {
       const i = index.get(path);
       if (i === undefined) continue;
       if (selected) this.selectedFiles.add(path);
       else          this.selectedFiles.delete(path);
-      if (parent[i] >= 0) parents.add(parent[i]);
+      for (let f = parent[i]; f >= 0 && !touched.has(f); f = parent[f]) touched.add(f);
     }
-    for (const folder of parents) this._recomputeUp(folder);
+    // A parent always precedes its children in the list, so going backwards derives each folder once, after its contents.
+    for (const f of [...touched].sort((x, y) => y - x)) {
+      this.folderStates[this.treeData[f].path] = this._derivedState(f);
+    }
     this._markDirty();
   },
 
   _recomputeAbove(i) {
-    const parent = this.structure().parent[i];
-    if (parent >= 0) this._recomputeUp(parent);
-  },
-
-  _recomputeUp(folder) {
     const { parent } = this.structure();
-    for (let f = folder; f >= 0; f = parent[f]) {
+    for (let f = parent[i]; f >= 0; f = parent[f]) {
       this.folderStates[this.treeData[f].path] = this._derivedState(f);
     }
   },
@@ -170,11 +167,10 @@ const State = {
   // "names only", so it takes the side of the subfolders: excluded folder + unticked file stays excluded.
   _derivedState(f) {
     const tree = this.treeData;
-    const lvl  = tree[f].lvl + 1;
     let any = false, full = true, skipLike = true, nameLike = true, hasSkip = false;
-    for (let j = f + 1, end = this._subtreeEnd(f); j < end; j++) {
+    const { end: ends } = this.structure();
+    for (let j = f + 1, end = ends[f]; j < end; j = ends[j]) {
       const item = tree[j];
-      if (item.lvl !== lvl) continue;
       const s = item.type === 'file'
         ? (this.selectedFiles.has(item.path) ? 'full' : 'none')
         : (this.folderStates[item.path] || 'full');

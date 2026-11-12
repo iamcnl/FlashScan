@@ -196,7 +196,7 @@ const ContextMenu = (() => {
 
   function _setFolderState(folderPath, state) {
     State.setFolderState(folderPath, state);
-    if (_curTree) { _curTree.invalidate(); _curTree.render(); }
+    if (_curTree) _curTree.render();
   }
 
   function _showMetaToast(itm) {

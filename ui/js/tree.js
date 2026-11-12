@@ -341,12 +341,8 @@ const Tree = {
     const topY         = Math.max(0, scrollTop - OVERSCAN * ROW_H);
     const botY         = scrollTop + effectiveH + OVERSCAN * ROW_H;
 
-    let startIdx = 0;
-    while (startIdx < this._flatRows.length - 1 &&
-           this._offsets[startIdx + 1] <= topY) startIdx++;
-    let endIdx = startIdx;
-    while (endIdx < this._flatRows.length - 1 &&
-           this._offsets[endIdx + 1] < botY) endIdx++;
+    const startIdx = this._lastRowWhere(y => y <= topY, 0);
+    const endIdx   = this._lastRowWhere(y => y < botY, startIdx);
 
     const parts = [];
     for (let j = startIdx; j <= endIdx; j++) {
@@ -363,6 +359,16 @@ const Tree = {
     this._rowsEl.innerHTML = parts.join('');
     this._syncActiveDescendant(startIdx, endIdx);
     this.updateStats();
+  },
+
+  // Offsets only grow, so the last row whose offset passes the test is found by bisection.
+  _lastRowWhere(test, from) {
+    let lo = from, hi = this._flatRows.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (test(this._offsets[mid])) lo = mid; else hi = mid - 1;
+    }
+    return lo;
   },
 
   _rowId(idx) { return `tree-row-${idx}`; },
@@ -565,7 +571,6 @@ const Tree = {
     }
     State.setFilesSelected(paths, select);
     this._focusIdx = to;
-    this.invalidate();
     this.render();
   },
 
@@ -748,7 +753,6 @@ const Tree = {
       : states[(states.indexOf(cur) + 1) % 3];
     State.setFolderState(path, next);
     this._announce(`${this._nameOf(path)}: ${STATE_SPOKEN[next]}`);
-    this.invalidate();
     this.render();
   },
 
@@ -769,8 +773,7 @@ const Tree = {
       rowEl.className = (was ? 'row row-excluded' : 'row') + (isFocused ? ' row-focused' : '');
       rowEl.style.opacity = was ? '.5' : '';
     }
-    // Redraw due to parent folder pill change
-    this.invalidate();
+    // Redraw due to parent folder pill change; selection never changes which rows exist
     this.render();
   },
 
@@ -782,17 +785,17 @@ const Tree = {
     Object.keys(State.folderStates).forEach(p => {
       if (State.folderStates[p] !== 'full') State.folderStates[p] = 'full';
     });
-    State._markDirty(); this.invalidate(); this.render();
+    State._markDirty(); this.render();
   },
   deselectAll() {
     State.selectedFiles.clear();
     State.treeData.forEach(i => { if (i.type === 'folder') State.folderStates[i.path] = 'skip'; });
-    State._markDirty(); this.invalidate(); this.render();
+    State._markDirty(); this.render();
   },
   setAllFoldersNameOnly() {
     State.selectedFiles.clear();
     State.treeData.forEach(i => { if (i.type === 'folder') State.folderStates[i.path] = 'name'; });
-    State._markDirty(); this.invalidate(); this.render();
+    State._markDirty(); this.render();
   },
   collapseAll() {
     State.treeData.forEach(i => { if (i.type==='folder' && i.lvl > 0) this._collapsed.add(i.path); });
@@ -809,8 +812,7 @@ const Tree = {
   updateStats() {
     const { count, size, nameOnly } = State.exportStats();
 
-    const total   = State.treeData.reduce((n, i) => n + (i.type === 'file' ? 1 : 0), 0);
-    const visible = this._flatRows.filter(r => r.type === 'file').length;
+    const total   = State.structure().files;
     const pct     = total > 0 ? Math.round((count / total) * 100) : 0;
     const $       = id => document.getElementById(id);
     if ($('stat-files'))    $('stat-files').textContent    = `${count} files`;
@@ -818,7 +820,7 @@ const Tree = {
     if ($('stat-progress')) $('stat-progress').style.width = `${pct}%`;
     if ($('stat-pct'))      $('stat-pct').textContent      = `${pct} %`;
     if ($('search-count'))  $('search-count').textContent  =
-      State.searchQuery ? `${visible}` : `${total}`;
+      State.searchQuery ? `${this._flatRows.filter(r => r.type === 'file').length}` : `${total}`;
     const nameEl  = $('stat-name-only');
     const nameSep = $('stat-name-sep');
     if (nameEl && nameSep) {
