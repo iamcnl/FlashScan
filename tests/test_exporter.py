@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime
 from html.parser import HTMLParser
+from pathlib import Path
 
 import pytest
 
@@ -327,6 +328,68 @@ def test_paths_from_a_real_scan_match_folder_state_keys(tmp_path):
     items = list(exporter.iter_export(tree, states, {i["path"] for i in tree if i["type"] == "file"}))
 
     assert [i[2] for i in items] == ["drive", "top.txt", "keep", "a.jpg", "name_only"]
+
+
+DRIVE_ROOT = os.path.abspath(os.sep)
+
+SELECTION_CASES = json.loads(
+    (Path(__file__).parent / "selection_cases.json").read_text(encoding="utf-8")
+)
+
+
+def drive_path(rel):
+    return os.path.join(DRIVE_ROOT, *rel.split("/")) if rel else DRIVE_ROOT
+
+
+def drive_tree(entries):
+    return [
+        {
+            "lvl": rel.count("/") + 1 if rel else 0,
+            "type": entry["type"],
+            "name": rel.rsplit("/", 1)[-1] if rel else "drive",
+            "path": drive_path(rel),
+            "size": entry.get("size", 0),
+            "mtime": STAMP,
+        }
+        for entry in entries
+        for rel in [entry["path"]]
+    ]
+
+
+def run_case(case):
+    tree = drive_tree(SELECTION_CASES["tree"])
+    states = {drive_path(k): v for k, v in case.get("states", {}).items()}
+    chosen = all_files(tree) - {drive_path(p) for p in case.get("deselected", [])}
+    exts = set(case["active_exts"]) if case.get("active_exts") is not None else None
+    return list(exporter.iter_export(tree, states, chosen, exts))
+
+
+@pytest.mark.parametrize("case", SELECTION_CASES["cases"], ids=lambda c: c["name"])
+def test_selection_cases_shared_with_the_ui(case):
+    items = run_case(case)
+    files = [i for i in items if i[1] == "file"]
+
+    assert len(files) == case["files"]
+    assert sum(i[4] for i in files) == case["size"]
+    assert sum(1 for i in items if i[6] == "name") == case["name_only"]
+
+
+def test_names_only_on_a_drive_root_hides_every_subfolder():
+    tree = drive_tree(SELECTION_CASES["tree"])
+
+    items = list(exporter.iter_export(tree, {DRIVE_ROOT: "name"}, all_files(tree)))
+
+    assert [i[3] for i in items] == [DRIVE_ROOT]
+
+
+def test_a_partial_folder_chain_exports_a_re_ticked_file_under_a_drive_root():
+    tree = drive_tree(SELECTION_CASES["tree"])
+    states = {drive_path("a"): "partial", drive_path("a/b"): "partial", DRIVE_ROOT: "partial"}
+    chosen = {drive_path("a/b/two.log")}
+
+    items = list(exporter.iter_export(tree, states, chosen))
+
+    assert [i[2] for i in items if i[1] == "file"] == ["two.log"]
 
 
 # ── Markdown ─────────────────────────────────────────────────────

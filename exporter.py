@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import html as _html
 import json
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -99,50 +98,36 @@ def iter_export(tree: list, folder_states: dict, selected_files: set,
     Walks tree and yields only items that should appear in the export.
     Respects folder_states, selected_files and active_exts (extension filter).
 
-    tree is the scanner's flat DFS list: a file follows the folder entry that
-    contains it. Cost is linear in len(tree) times the folder depth.
+    tree is the scanner's flat DFS list: a folder is followed by its contents,
+    one level deeper. A skip or name folder hides everything below it, found
+    through lvl rather than path strings, so drive roots like "E:\\" need no
+    special case. State.exportStats in ui/js/state.js applies the same rule;
+    tests/selection_cases.json keeps the two in step.
 
     Yields: (lvl, type, name, path, size, mtime, folder_state)
     """
-    sep = os.sep
-    blocking = {p for p, state in folder_states.items() if state in ("skip", "name")}
-
-    def has_blocking_ancestor(path: str) -> bool:
-        if not blocking:
-            return False
-        cur = path
-        while True:
-            parent = os.path.dirname(cur)
-            if not parent or parent == cur:
-                return False
-            if parent in blocking and path.startswith(parent + sep):
-                return True
-            cur = parent
-
-    parent_blocked = False
+    hides: dict[int, bool] = {}   # hides[lvl]: the latest folder at that level, or an ancestor, hides its contents
     for item in tree:
         lvl, typ, name, fpath, size, mtime = (
             item["lvl"], item["type"], item["name"],
             item["path"], item["size"], item["mtime"],
         )
+        hidden = hides.get(lvl - 1, False)
 
         if typ == "folder":
             state = folder_states.get(fpath, "full")
-            ancestor_blocked = has_blocking_ancestor(fpath)
-            parent_blocked = ancestor_blocked or state in ("skip", "name")
-            if state == "skip" or ancestor_blocked:
+            hides[lvl] = hidden or state in ("skip", "name")
+            if state == "skip" or hidden:
                 continue
             yield (lvl, typ, name, fpath, size, mtime, state)
 
         elif typ == "file":
-            if fpath not in selected_files:
+            if hidden or fpath not in selected_files:
                 continue
             if active_exts is not None:
                 ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
                 if ext and ext not in active_exts:
                     continue
-            if parent_blocked:
-                continue
             yield (lvl, typ, name, fpath, size, mtime, "full")
 
 

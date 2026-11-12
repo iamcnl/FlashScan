@@ -558,17 +558,13 @@ const Tree = {
     const [a, b] = from <= to ? [from, to] : [to, from];
     // Use the direction recorded at the time of the anchor click, not the current state
     const select = this._lastClickSelect;
+    const paths = [];
     for (let i = a; i <= b; i++) {
       const row = this._flatRows[i];
-      if (!row || row.type !== 'file') continue;
-      if (select) State.selectedFiles.add(row.item.path);
-      else        State.selectedFiles.delete(row.item.path);
-      // Recompute parent folder state
-      const parent = this._parentFolderPath(row.item.path);
-      if (parent) this._recomputeFolderState(parent);
+      if (row && row.type === 'file') paths.push(row.item.path);
     }
+    State.setFilesSelected(paths, select);
     this._focusIdx = to;
-    State._markDirty();
     this.invalidate();
     this.render();
   },
@@ -750,13 +746,8 @@ const Tree = {
     const next   = cur === 'partial'
       ? 'skip'
       : states[(states.indexOf(cur) + 1) % 3];
-    State.folderStates[path] = next;
+    State.setFolderState(path, next);
     this._announce(`${this._nameOf(path)}: ${STATE_SPOKEN[next]}`);
-    this._syncFilesForFolder(path, next);
-    // Propagate change upward
-    const parent = this._parentFolderPath(path);
-    if (parent) this._recomputeFolderState(parent);
-    State._markDirty();
     this.invalidate();
     this.render();
   },
@@ -764,24 +755,9 @@ const Tree = {
   /* ── File actions ──────────────────────────────────────── */
   _toggleFile(path, rowEl) {
     const was = State.selectedFiles.has(path);
-    const parentPath = this._parentFolderPath(path);
-    const curFolderState = parentPath ? (State.folderStates[parentPath] || 'full') : null;
-
-    if (was) State.selectedFiles.delete(path);
-    else     State.selectedFiles.add(path);
+    State.setFilesSelected([path], !was);
     this._announce(`${this._nameOf(path)} ${was ? 'excluded' : 'included'}`);
 
-    // Recompute parent folder state
-    if (parentPath) {
-      if (!was && curFolderState === 'skip') {
-        // folder was skip, adding file → partial
-        State.folderStates[parentPath] = 'partial';
-      } else {
-        this._recomputeFolderState(parentPath);
-      }
-    }
-
-    State._markDirty();
     if (rowEl) {
       const cb     = rowEl.querySelector('[data-cb-toggle]');
       const nameEl = rowEl.querySelector('.row-name');
@@ -796,84 +772,6 @@ const Tree = {
     // Redraw due to parent folder pill change
     this.invalidate();
     this.render();
-  },
-
-  /* ── File sync on folder state change ──────────────────── */
-  _isDescendant(filePath, folderPath) {
-    const sep = filePath.includes('/') ? '/' : '\\';
-    return filePath.startsWith(folderPath + sep) || filePath === folderPath;
-  },
-
-  // Returns the direct parent folder (path → path or null).
-  _parentFolderPath(filePath) {
-    const sep = filePath.includes('/') ? '/' : '\\';
-    const idx = filePath.lastIndexOf(sep);
-    if (idx <= 0) return null;
-    const parentPath = filePath.slice(0, idx);
-    return State.treeData.find(i => i.type === 'folder' && i.path === parentPath)
-      ? parentPath : null;
-  },
-
-  // Syncs files and subfolders when folder state changes (downward).
-  // full  → all files + subfolders to full
-  // otherwise → deselect files, subfolders to same state
-  _syncFilesForFolder(folderPath, folderState) {
-    for (const itm of State.treeData) {
-      if (!this._isDescendant(itm.path, folderPath)) continue;
-      if (itm.type === 'file') {
-        if (folderState === 'full') State.selectedFiles.add(itm.path);
-        else State.selectedFiles.delete(itm.path);
-      } else if (itm.type === 'folder' && itm.path !== folderPath) {
-        State.folderStates[itm.path] = folderState;
-      }
-    }
-  },
-
-  // Recomputes folder state bottom-up based on direct children states.
-  // Direct children = direct subfolders + direct files.
-  // Called recursively up to the root.
-  _recomputeFolderState(folderPath) {
-    const sep = folderPath.includes('/') ? '/' : '\\';
-
-    // Direct subfolders (one level down, not deeper)
-    const directFolders = State.treeData.filter(i => {
-      if (i.type !== 'folder' || i.path === folderPath) return false;
-      if (!this._isDescendant(i.path, folderPath)) return false;
-      // direct: remainder of path after folderPath contains no sep
-      const rel = i.path.slice(folderPath.length + 1);
-      return !rel.includes(sep);
-    });
-
-    // Direct files
-    const directFiles = State.treeData.filter(i => {
-      if (i.type !== 'file') return false;
-      if (!this._isDescendant(i.path, folderPath)) return false;
-      const rel = i.path.slice(folderPath.length + 1);
-      return !rel.includes(sep);
-    });
-
-    const folderStates = directFolders.map(i => State.folderStates[i.path] || 'full');
-    const fileStates   = directFiles.map(i => State.selectedFiles.has(i.path) ? 'full' : 'none');
-    const allStates    = [...folderStates, ...fileStates];
-
-    let newState;
-    if (allStates.length === 0) {
-      newState = State.folderStates[folderPath] || 'full'; // folder with no contents — don't change
-    } else if (allStates.every(s => s === 'full')) {
-      newState = 'full';
-    } else if (allStates.every(s => s === 'skip')) {
-      newState = 'skip';
-    } else if (allStates.every(s => s === 'name' || s === 'none')) {
-      newState = 'name';
-    } else {
-      newState = 'partial';
-    }
-
-    State.folderStates[folderPath] = newState;
-
-    // Propagate upward
-    const parent = this._parentFolderPath(folderPath);
-    if (parent) this._recomputeFolderState(parent);
   },
 
   /* ── Bulk actions ──────────────────────────────────────── */
@@ -909,30 +807,9 @@ const Tree = {
 
   /* ── Statistics ────────────────────────────────────────── */
   updateStats() {
-    const { nameOnly } = State.exportStats();
+    const { count, size, nameOnly } = State.exportStats();
 
-    // If extension filter is active, count only matching files
-    const activeExts = State.activeExts; // null = all, Set = allowed extensions
-    const matchesExt = (item) => {
-      if (!activeExts) return true;
-      const dot = item.name.lastIndexOf('.');
-      const ext = dot >= 0 ? item.name.slice(dot + 1).toLowerCase() : '';
-      return activeExts.has(ext);
-    };
-
-    const allFiles = State.treeData.filter(i => i.type === 'file');
-    const filteredFiles = allFiles.filter(matchesExt);
-
-    // Export stats — only from visible (filtered) files
-    let count = 0;
-    let size  = 0;
-    for (const item of filteredFiles) {
-      if (!State.selectedFiles.has(item.path)) continue;
-      count++;
-      size += item.size || 0;
-    }
-
-    const total   = allFiles.length;
+    const total   = State.treeData.reduce((n, i) => n + (i.type === 'file' ? 1 : 0), 0);
     const visible = this._flatRows.filter(r => r.type === 'file').length;
     const pct     = total > 0 ? Math.round((count / total) * 100) : 0;
     const $       = id => document.getElementById(id);

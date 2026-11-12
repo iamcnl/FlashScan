@@ -191,31 +191,11 @@ const ContextMenu = (() => {
   }
 
   function _selectFolder(folderPath, select) {
-    for (const itm of State.treeData) {
-      if (itm.type !== 'file') continue;
-      if (!_isDescendant(itm.path, folderPath)) continue;
-      select ? State.selectedFiles.add(itm.path) : State.selectedFiles.delete(itm.path);
-    }
-    // Sync folder state: select all → full, deselect all → name
-    State.folderStates[folderPath] = select ? 'full' : 'name';
-    State._markDirty();
-    if (_curTree) { _curTree.invalidate(); _curTree.render(); }
-  }
-
-  function _isDescendant(filePath, folderPath) {
-    const sep  = filePath.includes('/') ? '/' : '\\';
-    return filePath.startsWith(folderPath + sep) || filePath === folderPath;
+    _setFolderState(folderPath, select ? 'full' : 'name');
   }
 
   function _setFolderState(folderPath, state) {
-    State.folderStates[folderPath] = state;
-    if (_curTree) {
-      _curTree._syncFilesForFolder(folderPath, state);
-      // Propagate change upward
-      const parent = _curTree._parentFolderPath(folderPath);
-      if (parent) _curTree._recomputeFolderState(parent);
-    }
-    State._markDirty();
+    State.setFolderState(folderPath, state);
     if (_curTree) { _curTree.invalidate(); _curTree.render(); }
   }
 
