@@ -1,0 +1,41 @@
+{
+  "tree": [
+    { "path": "", "type": "folder" },
+    { "path": "r.txt", "type": "file", "size": 1 },
+    { "path": "a", "type": "folder" },
+    { "path": "a/one.txt", "type": "file", "size": 2 },
+    { "path": "a/b", "type": "folder" },
+    { "path": "a/b/two.log", "type": "file", "size": 4 },
+    { "path": "c", "type": "folder" },
+    { "path": "c/three.txt", "type": "file", "size": 8 },
+    { "path": "c/README", "type": "file", "size": 16 }
+  ],
+  "cases": [
+    { "name": "everything", "files": 5, "size": 31, "name_only": 0 },
+    { "name": "root names only", "states": { "": "name" }, "files": 0, "size": 0, "name_only": 1 },
+    { "name": "root excluded", "states": { "": "skip" }, "files": 0, "size": 0, "name_only": 0 },
+    {
+      "name": "file re-ticked inside an excluded folder, ancestors partial",
+      "states": { "": "partial", "a": "partial", "a/b": "partial" },
+      "deselected": ["a/one.txt"],
+      "files": 4, "size": 29, "name_only": 0
+    },
+    {
+      "name": "a skipped ancestor still hides a partial child",
+      "states": { "a": "skip", "a/b": "partial" },
+      "deselected": ["a/one.txt"],
+      "files": 3, "size": 25, "name_only": 0
+    },
+    {
+      "name": "names only inside names only counts once",
+      "states": { "a": "name", "a/b": "name" },
+      "files": 3, "size": 25, "name_only": 1
+    },
+    { "name": "deselected file", "deselected": ["c/three.txt"], "files": 4, "size": 23, "name_only": 0 },
+    {
+      "name": "extension filter keeps extensionless files",
+      "active_exts": ["txt"],
+      "files": 4, "size": 27, "name_only": 0
+    }
+  ]
+}

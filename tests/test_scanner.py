@@ -653,8 +653,10 @@ def test_scan_lists_folders_deeper_than_the_windows_limit_under_their_plain_path
     deep = root
     for _ in range(6):
         deep = deep / ("d" * 50)
-    deep.mkdir(parents=True)
-    (deep / "leaf.txt").write_bytes(b"x" * 7)
+    plain = lambda path: "\\\\?\\" + str(path) if os.name == "nt" else str(path)
+    os.makedirs(plain(deep))
+    with open(plain(deep / "leaf.txt"), "wb") as fh:
+        fh.write(b"x" * 7)
 
     result = scan(root)
 
