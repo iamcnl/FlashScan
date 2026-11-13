@@ -130,3 +130,16 @@ for (const c of fixture.cases) {
     });
   });
 }
+
+test("dropping a file on the window is cancelled", async () => {
+  await withApp((app) => {
+    const result = app.evaluate(`
+      const e = new Event('drop', { cancelable: true });
+      window.dispatchEvent(e);
+      const over = new Event('dragover', { cancelable: true });
+      window.dispatchEvent(over);
+      return JSON.stringify([e.defaultPrevented, over.defaultPrevented]);
+    `);
+    assert.equal(result, "[true,true]");
+  });
+});

@@ -335,19 +335,46 @@ def test_open_path_hides_unexpected_launcher_failures_but_logs_them(app, tmp_pat
 
 @pytest.mark.parametrize("name", [
     "setup.exe", "RUN.BAT", "script.ps1", "shortcut.lnk", "installer.msi",
+    "help.chm", "snap.msc", "disc.iso", "lib.dll", "macro.docm", "sheet.xlsm", "deck.pptm",
 ])
-def test_opening_a_launchable_file_asks_for_confirmation_first(app, tmp_path, monkeypatch, name):
-    opened = []
+def test_opening_a_launchable_file_asks_in_the_backend_first(app, tmp_path, monkeypatch, name):
+    opened, asked = [], []
     monkeypatch.setattr(api.os, "startfile", opened.append, raising=False)
+    monkeypatch.setattr(api, "_ask_to_launch", lambda n: asked.append(n) or True)
     target = tmp_path / name
     target.write_text("x")
     app._trust_root(str(tmp_path))
 
-    assert app.open_path(str(target)) == {"confirm": True, "name": target.name}
+    assert app.open_path(str(target)) == {"ok": True}
+    assert asked == [name]
+    assert opened == [str(target)]
+
+
+def test_declining_the_prompt_launches_nothing(app, tmp_path, monkeypatch):
+    opened = []
+    monkeypatch.setattr(api.os, "startfile", opened.append, raising=False)
+    monkeypatch.setattr(api, "_ask_to_launch", lambda n: False)
+    target = tmp_path / "setup.exe"
+    target.write_text("x")
+    app._trust_root(str(tmp_path))
+
+    assert app.open_path(str(target)) == {"cancelled": True}
     assert opened == []
 
-    assert app.open_path(str(target), True) == {"ok": True}
-    assert opened == [str(target)]
+
+def test_a_caller_cannot_skip_the_prompt(app, tmp_path, monkeypatch):
+    opened = []
+    monkeypatch.setattr(api.os, "startfile", opened.append, raising=False)
+    monkeypatch.setattr(api, "_ask_to_launch", lambda n: False)
+    target = tmp_path / "setup.exe"
+    target.write_text("x")
+    app._trust_root(str(tmp_path))
+
+    with pytest.raises(TypeError):
+        app.open_path(str(target), True)
+    with pytest.raises(TypeError):
+        app.open_path(str(target), confirmed=True)
+    assert opened == []
 
 
 @pytest.mark.parametrize("name", ["setup.exe.", "setup.exe ", "setup.exe. .", "SETUP.EXE"])
@@ -378,7 +405,6 @@ def test_untrusted_launchable_files_are_still_denied_without_a_prompt(app, tmp_p
     target.write_text("x")
 
     assert app.open_path(str(target)) == api._DENIED
-    assert app.open_path(str(target), True) == api._DENIED
 
 
 @pytest.mark.parametrize("as_folder", [False, True])

@@ -66,6 +66,10 @@ _LAUNCHABLE_EXTS = frozenset({
     ".exe", ".com", ".scr", ".pif", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".js", ".jse",
     ".wsf", ".wsh", ".hta", ".msi", ".msp", ".msix", ".appx", ".application", ".lnk",
     ".url", ".reg", ".cpl", ".inf", ".scf", ".jar", ".gadget",
+    ".chm", ".msc", ".iso", ".img", ".vhd", ".vhdx", ".dll", ".ocx", ".sys", ".drv", ".mst",
+    ".docm", ".dotm", ".xlsm", ".xlam", ".xltm", ".xll", ".pptm", ".potm", ".ppam", ".sldm",
+    ".ws", ".wsc", ".vb", ".psm1", ".psd1", ".ps1xml", ".msh", ".diagcab", ".appref-ms",
+    ".library-ms", ".search-ms", ".settingcontent-ms", ".shs", ".rdp", ".iqy", ".slk",
 })
 
 
@@ -73,6 +77,20 @@ def _launches_code(path: Path) -> bool:
     # Windows ignores trailing dots and spaces, so "setup.exe." still runs as setup.exe
     extension = os.path.splitext(path.name.rstrip(" ."))[1].lower()
     return path.is_file() and extension in _LAUNCHABLE_EXTS
+
+
+def _ask_to_launch(name: str) -> bool:
+    """Native yes/no prompt, defaulting to No. It lives in the backend, so a script in the page cannot answer it."""
+    import ctypes
+    yes_no, warning, default_no, foreground, topmost = 0x4, 0x30, 0x100, 0x10000, 0x40000
+    answer = ctypes.windll.user32.MessageBoxW(
+        None,
+        f'"{name}" can run code on this computer when opened.\n\n'
+        "Only open it if you trust where it came from.\n\nOpen it?",
+        "Open this file?",
+        yes_no | warning | default_no | foreground | topmost,
+    )
+    return answer == 6
 
 
 def _reserve_unique(path: Path) -> Path:
@@ -233,12 +251,12 @@ class API:
 
     # ── File / folder operations ──────────────────────────────────
 
-    def open_path(self, path: str, confirmed: bool = False) -> dict:
+    def open_path(self, path: str) -> dict:
         """
         Opens a file or folder with the OS default application.
 
-        Files that run code when opened are not launched until the caller repeats the
-        request with confirmed=True; until then the result is {"confirm": True, "name": ...}.
+        Files that run code when opened are launched only after the user says yes in a
+        native prompt shown here; if they decline, the result is {"cancelled": True}.
         """
         try:
             if not self._is_trusted(path):
@@ -246,8 +264,8 @@ class API:
             p = Path(path)
             if not p.exists():
                 return {"error": "Path does not exist."}
-            if not confirmed and _launches_code(p):
-                return {"confirm": True, "name": p.name}
+            if _launches_code(p) and not _ask_to_launch(p.name):
+                return {"cancelled": True}
             os.startfile(str(p))
             return {"ok": True}
         except Exception as e:
