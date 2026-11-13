@@ -814,7 +814,7 @@ NOTHING_SELECTED = {
                        str(d / "photos" / "p.png")],
     },
     "root folder skipped": lambda d: {"all_except": [], "folder_states": {str(d): "skip"}},
-    "extension filter matches nothing": lambda d: {"all_except": [], "active_exts": ["xyz"]},
+    "every extension hidden": lambda d: {"all_except": [], "hidden_exts": ["txt", "log", "md", "png"]},
 }
 
 
@@ -847,7 +847,7 @@ def test_export_applies_folder_states_extension_filter_and_notes(app, window, dr
         "all_except": [],
         "folder_states": {str(drive / "photos"): "skip", str(drive / "docs"): "name"},
         "folder_notes": {str(drive): "backup of 2024"},
-        "active_exts": ["txt", "md"],
+        "hidden_exts": ["log", "png"],
     }
     result = run_export(app, window, scan["scan_id"], out, ["JSON"], selection)
 

@@ -119,7 +119,7 @@ const Tree = {
 
   /* ── Rebuild ──────────────────────────────────────────── */
   _rebuild() {
-    const { treeData, activeExts, searchQuery, sortCol, sortDir } = State;
+    const { treeData, hiddenExts, searchQuery, sortCol, sortDir } = State;
     const q = searchQuery.trim().toLowerCase();
 
 
@@ -129,7 +129,7 @@ const Tree = {
 
     const advFilter = State.advFilter || null;
 
-    if (q || activeExts || advFilter) {
+    if (q || hiddenExts || advFilter) {
       matchFiles   = new Set();
       matchFolders = new Set();
 
@@ -159,10 +159,7 @@ const Tree = {
           if (insideMatchedFolder) {
             matchFiles.add(item.path);
           } else {
-            if (activeExts) {
-              const ext = getExt(item.name);
-              if (ext && activeExts.has(ext) === false && Filters._extState.hasOwnProperty(ext)) continue;
-            }
+            if (hiddenExts && hiddenExts.has(getExt(item.name))) continue;
             if (q && !item.name.toLowerCase().includes(q)) continue;
             if (advFilter && !advFilter.matches(item)) continue;
             matchFiles.add(item.path);
@@ -250,12 +247,8 @@ const Tree = {
 
       } else {
         // File — filter
-        if (activeExts) {
-          const ext = getExt(name);
-          // If extension is known and not in activeExts → skip
-          // Unknown extensions (ext not in any group) always pass
-          if (ext && activeExts.has(ext) === false && Filters._extState.hasOwnProperty(ext)) continue;
-        }
+        // Unlisted extensions and files without one are never hidden
+        if (hiddenExts && hiddenExts.has(getExt(name))) continue;
         if (matchFiles !== null && !matchFiles.has(path)) continue;
 
         // Find the correct parent folder on the stack

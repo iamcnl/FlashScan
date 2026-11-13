@@ -93,10 +93,11 @@ class _Lines:
 
 
 def iter_export(tree: list, folder_states: dict, selected_files: set,
-                 active_exts: set | None = None):
+                 hidden_exts: set | None = None):
     """
     Walks tree and yields only items that should appear in the export.
-    Respects folder_states, selected_files and active_exts (extension filter).
+    Respects folder_states, selected_files and hidden_exts (extensions unticked in the
+    sidebar; any other extension, listed there or not, and files without one, stay in).
 
     tree is the scanner's flat DFS list: a folder is followed by its contents,
     one level deeper. A skip or name folder hides everything below it, found
@@ -124,10 +125,8 @@ def iter_export(tree: list, folder_states: dict, selected_files: set,
         elif typ == "file":
             if hidden or fpath not in selected_files:
                 continue
-            if active_exts is not None:
-                ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-                if ext and ext not in active_exts:
-                    continue
+            if hidden_exts and "." in name and name.rsplit(".", 1)[-1].lower() in hidden_exts:
+                continue
             yield (lvl, typ, name, fpath, size, mtime, "full")
 
 

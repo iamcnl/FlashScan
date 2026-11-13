@@ -456,7 +456,7 @@ class API:
                   date_pattern (strftime layout of %d %m %Y; invalid values fall back to the default),
                   selection: { all_except | only: [file paths],
                                folder_states: {path: state} (folders that are not "full"),
-                               folder_notes, active_exts: [ext] | null } }
+                               folder_notes, hidden_exts: [ext] | null } }
         """
         out_path = Path(params.get("output_dir", ""))
         try:
@@ -598,12 +598,12 @@ class API:
     def _export_items(self, scan: dict, selection: dict):
         import exporter  # lazy
 
-        raw_exts    = selection.get("active_exts")
-        active_exts = set(raw_exts) if raw_exts is not None else None
+        raw_exts    = selection.get("hidden_exts")
+        hidden_exts = {str(e).lower() for e in raw_exts} if raw_exts else None
         tree        = scan["tree"]
         return exporter.iter_export(
             tree, selection.get("folder_states", {}),
-            self._selected_files(tree, selection), active_exts,
+            self._selected_files(tree, selection), hidden_exts,
         )
 
     @staticmethod

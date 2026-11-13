@@ -26,7 +26,7 @@ const State = {
   folderStates:  {},
   folderNotes:   {},   // { path: "note text" } — secondary locations (YouTube, Drive, etc.)
 
-  activeExts:  null,   // null = all; Set<string> = extension filter
+  hiddenExts:  null,   // null = nothing hidden; Set<string> = extensions unticked in the sidebar
   searchQuery: '',
   advFilter:   null,   // null = inactive; AdvFilter object = active
   sortCol: 'name',
@@ -46,7 +46,7 @@ const State = {
   // Recomputed only when selectedFiles or folderStates change
   _exportCacheDirty: true,
   _exportCache: null,   // { count, size, nameOnly, empty }
-  _exportCacheExts: null,   // activeExts the cache was computed for (filters.js always assigns a new value)
+  _exportCacheExts: null,   // hiddenExts the cache was computed for (filters.js always assigns a new value)
 
   _markDirty() {
     this._exportCacheDirty = true;
@@ -54,7 +54,7 @@ const State = {
   },
 
   exportStats() {
-    if (!this._exportCacheDirty && this._exportCache && this._exportCacheExts === this.activeExts) {
+    if (!this._exportCacheDirty && this._exportCache && this._exportCacheExts === this.hiddenExts) {
       return this._exportCache;
     }
 
@@ -77,17 +77,17 @@ const State = {
     }
 
     this._exportCache      = { count, size, nameOnly, empty: count === 0 && nameOnly === 0 };
-    this._exportCacheExts  = this.activeExts;
+    this._exportCacheExts  = this.hiddenExts;
     this._exportCacheDirty = false;
     return this._exportCache;
   },
 
-  // Files without an extension always pass, as in the exporter.
+  // Only extensions unticked in the sidebar are hidden; unlisted ones and files without one always pass,
+  // as in the tree and the exporter.
   matchesExt(name) {
-    if (!this.activeExts) return true;
+    if (!this.hiddenExts) return true;
     const dot = name.lastIndexOf('.');
-    const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
-    return !ext || this.activeExts.has(ext);
+    return dot < 0 || !this.hiddenExts.has(name.slice(dot + 1).toLowerCase());
   },
 
   // ── Tree structure ────────────────────────────────────────────
@@ -199,7 +199,7 @@ const State = {
       ...(deselected.length <= selected.length ? { all_except: deselected } : { only: selected }),
       folder_states: folderStates,
       folder_notes:  this.folderNotes,
-      active_exts:   this.activeExts ? [...this.activeExts] : null,
+      hidden_exts:   this.hiddenExts ? [...this.hiddenExts] : null,
     };
   },
 
@@ -209,7 +209,7 @@ const State = {
     this.searchQuery = '';
     this.sortCol     = ['name', 'size', 'date'].includes(this.settings.sortCol) ? this.settings.sortCol : 'name';
     this.sortDir     = this.settings.sortDir === 'desc' ? 'desc' : 'asc';
-    this.activeExts  = null;
+    this.hiddenExts  = null;
     this.advFilter   = null;
     this._markDirty();
   },

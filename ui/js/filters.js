@@ -36,7 +36,7 @@ const Filters = {
       const saved = await window.pywebview.api.get_custom_exts();
       if (Array.isArray(saved)) saved.forEach(ext => this._registerCustomExt(ext));
     } catch (_) {}
-    State.activeExts = null;
+    State.hiddenExts = null;
     this._renderGroups();
     this.updateCounts();
     this._bindSearch();
@@ -279,8 +279,8 @@ const Filters = {
 
   _applyExtFilter() {
     const allOn = Object.values(this._extState).every(Boolean);
-    State.activeExts = allOn ? null : new Set(
-      Object.entries(this._extState).filter(([, v]) => v).map(([k]) => k)
+    State.hiddenExts = allOn ? null : new Set(
+      Object.entries(this._extState).filter(([, v]) => !v).map(([k]) => k)
     );
   },
 
@@ -381,7 +381,7 @@ const Filters = {
     for (const ext of Object.keys(this._extState)) this._extState[ext] = true;
     document.querySelectorAll('[data-ecb]').forEach(el => { el.checked = true; });
     document.querySelectorAll('[data-gcb]').forEach(el => { el.checked = true; el.indeterminate = false; });
-    State.activeExts = null;
+    State.hiddenExts = null;
     Tree.invalidate(); Tree.render();
   },
 
@@ -389,7 +389,7 @@ const Filters = {
     for (const ext of Object.keys(this._extState)) this._extState[ext] = false;
     document.querySelectorAll('[data-ecb]').forEach(el => { el.checked = false; });
     document.querySelectorAll('[data-gcb]').forEach(el => { el.checked = false; el.indeterminate = false; });
-    State.activeExts = new Set();
+    State.hiddenExts = new Set(Object.keys(this._extState));
     Tree.invalidate(); Tree.render();
   },
 };

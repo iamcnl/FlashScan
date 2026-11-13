@@ -58,18 +58,18 @@ test("export stats: folder names only is a legitimate export", async () => {
   });
 });
 
-test("export stats: an extension filter that matches no selected file counts as empty", async () => {
+test("export stats: hiding every extension of the selected files counts as empty", async () => {
   await withApp(async (app) => {
     load(app);
     assert.equal(stats(app).count, 3);
 
-    app.evaluate("State.activeExts = new Set(['xyz']);");
+    app.evaluate("State.hiddenExts = new Set(['txt', 'log', 'md']);");
     assert.equal(stats(app).empty, true);
 
-    app.evaluate("State.activeExts = new Set(['txt', 'md']);");
+    app.evaluate("State.hiddenExts = new Set(['log']);");
     assert.deepEqual(stats(app), { count: 2, size: 9, nameOnly: 0, empty: false });
 
-    app.evaluate("State.activeExts = null;");
+    app.evaluate("State.hiddenExts = null;");
     assert.equal(stats(app).count, 3);
   });
 });

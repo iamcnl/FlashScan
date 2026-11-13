@@ -55,9 +55,9 @@ def all_files(tree):
     return {n["path"] for n in tree if n["type"] == "file"}
 
 
-def export(tree, states=None, files=None, exts=None):
+def export(tree, states=None, files=None, hidden=None):
     chosen = all_files(tree) if files is None else files
-    return list(exporter.iter_export(tree, states or {}, chosen, exts))
+    return list(exporter.iter_export(tree, states or {}, chosen, hidden))
 
 
 def labels(items):
@@ -277,43 +277,43 @@ EXT_TREE = make_tree(
 )
 
 
-def test_no_extension_filter_keeps_every_file():
-    assert len(export(EXT_TREE, exts=None)) == len(EXT_TREE)
+def test_no_hidden_extensions_keeps_every_file():
+    assert len(export(EXT_TREE, hidden=None)) == len(EXT_TREE)
+    assert len(export(EXT_TREE, hidden=set())) == len(EXT_TREE)
 
 
-def test_extension_filter_is_case_insensitive_on_the_file_name():
-    got = labels(export(EXT_TREE, exts={"jpg"}))
+def test_hidden_extensions_match_the_file_name_case_insensitively():
+    got = labels(export(EXT_TREE, hidden={"jpg"}))
 
-    assert "photo.JPG" in got and "sub/pic.jpg" in got
-    assert "song.mp3" not in got and "readme.md" not in got
-    assert ".gitignore" not in got and "x.tar.gz" not in got
-
-
-def test_extensionless_files_always_pass_the_extension_filter():
-    got = labels(export(EXT_TREE, exts={"jpg"}))
-
-    assert "notes" in got
-    assert "archive." in got
+    assert "photo.JPG" not in got and "sub/pic.jpg" not in got
+    assert "song.mp3" in got and "readme.md" in got
 
 
-def test_empty_extension_set_keeps_only_extensionless_files_and_all_folders():
-    got = labels(export(EXT_TREE, exts=set()))
+def test_extensions_that_are_not_hidden_stay_in_even_when_unlisted():
+    got = labels(export(EXT_TREE, hidden={"mp3"}))
+
+    assert "song.mp3" not in got
+    assert "x.tar.gz" in got and ".gitignore" in got and "readme.md" in got
+
+
+def test_extensionless_files_are_never_hidden():
+    got = labels(export(EXT_TREE, hidden={"jpg", "mp3", "md", "gz", "gitignore"}))
 
     assert got == ["drive/", "notes", "archive.", "sub/"]
 
 
-def test_extension_filter_never_hides_folders():
-    got = labels(export(EXT_TREE, exts={"zzz"}))
+def test_hiding_extensions_never_hides_folders():
+    got = labels(export(EXT_TREE, hidden={"jpg", "mp3"}))
 
     assert "sub/" in got
 
 
-def test_extension_filter_and_selection_both_apply():
-    chosen = all_files(EXT_TREE) - {path_of("photo.JPG")}
-    got = labels(export(EXT_TREE, files=chosen, exts={"jpg"}))
+def test_hidden_extensions_and_selection_both_apply():
+    chosen = all_files(EXT_TREE) - {path_of("song.mp3")}
+    got = labels(export(EXT_TREE, files=chosen, hidden={"jpg"}))
 
-    assert "photo.JPG" not in got
-    assert "sub/pic.jpg" in got
+    assert "song.mp3" not in got and "photo.JPG" not in got
+    assert "readme.md" in got
 
 
 def test_paths_from_a_real_scan_match_folder_state_keys(tmp_path):
@@ -360,8 +360,8 @@ def run_case(case):
     tree = drive_tree(SELECTION_CASES["tree"])
     states = {drive_path(k): v for k, v in case.get("states", {}).items()}
     chosen = all_files(tree) - {drive_path(p) for p in case.get("deselected", [])}
-    exts = set(case["active_exts"]) if case.get("active_exts") is not None else None
-    return list(exporter.iter_export(tree, states, chosen, exts))
+    hidden = set(case["hidden_exts"]) if case.get("hidden_exts") is not None else None
+    return list(exporter.iter_export(tree, states, chosen, hidden))
 
 
 @pytest.mark.parametrize("case", SELECTION_CASES["cases"], ids=lambda c: c["name"])

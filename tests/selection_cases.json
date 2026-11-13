@@ -33,8 +33,13 @@
     },
     { "name": "deselected file", "deselected": ["c/three.txt"], "files": 4, "size": 23, "name_only": 0 },
     {
-      "name": "extension filter keeps extensionless files",
-      "active_exts": ["txt"],
+      "name": "hiding an extension keeps extensionless files",
+      "hidden_exts": ["txt"],
+      "files": 2, "size": 20, "name_only": 0
+    },
+    {
+      "name": "hiding an extension keeps unlisted ones",
+      "hidden_exts": ["log"],
       "files": 4, "size": 27, "name_only": 0
     }
   ]
