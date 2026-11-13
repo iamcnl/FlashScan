@@ -680,3 +680,13 @@ def test_every_directory_read_goes_through_the_long_path_helper(root, monkeypatc
     scan(root)
 
     assert set(asked) == {str(root), str(root / "a"), str(root / "a" / "b")}
+
+
+def test_scan_shows_a_lone_surrogate_name_escaped_but_keeps_its_real_path(root):
+    odd = "bad\udc80.txt"
+    (root / odd).write_text("x")
+
+    result = scan(root)
+
+    leaf = item(result, "bad\\udc80.txt")
+    assert leaf["path"] == str(root / odd)

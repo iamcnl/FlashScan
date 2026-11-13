@@ -15,6 +15,8 @@ import stat
 import threading
 from pathlib import Path
 
+from safe_text import printable
+
 # ── Windows system folders (skip if incl_system=False) ──
 WIN_SYSTEM_DIRS = {
     "$recycle.bin", "system volume information", "$windows.~bt",
@@ -177,7 +179,7 @@ def scan_path(
     hidden_bit = stat.FILE_ATTRIBUTE_HIDDEN
     system_bit = stat.FILE_ATTRIBUTE_SYSTEM
     parent_of: dict[int, int | None] = {}
-    stack = [(str(root), root.name, 0, None, None, None)]
+    stack = [(str(root), printable(root.name), 0, None, None, None)]
 
     while stack:
         check_cancelled()
@@ -248,7 +250,7 @@ def scan_path(
                 continue
 
             if is_dir:
-                subdirs.append((path, name, depth + 1, folder_idx, st, err))
+                subdirs.append((path, printable(name), depth + 1, folder_idx, st, err))
                 continue
             if st is None:
                 note_unreadable(path, "file", err)
@@ -258,7 +260,7 @@ def scan_path(
             tree.append({
                 "lvl":   depth + 1,
                 "type":  "file",
-                "name":  name,
+                "name":  printable(name),
                 "path":  path,
                 "size":  size,
                 "mtime": st.st_mtime,

@@ -57,7 +57,11 @@ const DateFmt = {
       : String(date.getFullYear()));
   },
 
+  // Dates the exporter cannot write (outside years 1-9999) are blank here as well.
   format(ts) {
-    return ts ? this.formatDate(new Date(ts * 1000)) : '';
+    if (!ts) return '';
+    const date = new Date(ts * 1000);
+    const year = date.getFullYear();
+    return year >= 1 && year <= 9999 ? this.formatDate(date) : '';
   },
 };

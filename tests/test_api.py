@@ -697,8 +697,62 @@ def test_scan_survives_a_window_that_rejects_javascript(app, window, drive):
     wait_until(lambda: app._scan_data is not None and app._scan_cancel is None)
 
     window.take("onScanDone")
+    assert "could not be shown" in window.take_json("onScanDone")["error"]
     window.fail = False
     assert run_scan(app, window, drive)["scan_id"] == 2
+
+
+# ── Names and dates the file system allows but text cannot hold ──
+
+ODD_NAME = "bad\udc80name.txt"
+
+
+@pytest.fixture
+def odd_drive(drive):
+    (drive / ODD_NAME).write_text("x")
+    return drive
+
+
+def test_a_lone_surrogate_name_is_listed_escaped_and_keeps_its_real_path(app, window, odd_drive):
+    scan = run_scan(app, window, odd_drive)
+
+    item = next(i for i in scan["tree"] if i["name"].startswith("bad"))
+    assert item["name"] == "bad\\udc80name.txt"
+    assert item["path"] == str(odd_drive / ODD_NAME)
+
+
+def test_every_format_exports_a_lone_surrogate_name(app, window, odd_drive, out):
+    scan = run_scan(app, window, odd_drive)
+    result = run_export(app, window, scan["scan_id"], out, ["MD", "TXT", "JSON", "HTML"])
+
+    assert result["success"] is True
+    assert result["errors"] == []
+    assert len(result["saved"]) == 4
+    for saved in result["saved"]:
+        assert "udc80name.txt" in Path(saved).read_text(encoding="utf-8")
+
+
+def test_a_lone_surrogate_path_in_the_selection_still_selects_the_file(app, window, odd_drive, out):
+    scan = run_scan(app, window, odd_drive)
+    selection = {"all_except": [str(odd_drive / "a.txt")]}
+
+    result = run_export(app, window, scan["scan_id"], out, ["JSON"], selection=selection)
+
+    names, _ = exported_names(result["saved"][0])
+    assert "bad\\udc80name.txt" in names and "a.txt" not in names
+
+
+def test_a_failed_export_result_is_replaced_by_a_message_the_ui_can_show(app, window, drive, out):
+    scan = run_scan(app, window, drive)
+    window.fail = True
+    params = {"scan_id": scan["scan_id"], "formats": ["MD"], "output_dir": str(out), "selection": {"all_except": []}}
+
+    assert app.export(params) == {"async": True}
+    window.take("onExportDone")
+    fallback = window.take_json("onExportDone")
+
+    assert fallback["success"] is False
+    assert "could not be shown" in fallback["error"]
 
 
 # ── Export validation ────────────────────────────────────────────

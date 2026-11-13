@@ -24,6 +24,8 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
+import safe_text
+
 import json
 import logging
 import time
@@ -57,6 +59,12 @@ def _folder_state(path) -> str:
             raise
         return "missing"
     return "folder" if stat.S_ISDIR(mode) else "file"
+
+
+_RESULT_NOT_SHOWN = {
+    "scan":   "The scan finished, but its result could not be shown. See the log file for details.",
+    "export": "The export finished, but its result could not be shown. Check the output folder and the log file.",
+}
 
 
 def _failure(operation: str, exc: Exception) -> dict:
@@ -160,14 +168,16 @@ class API:
     def _window(self):
         return self._win[0] if self._win else None
 
-    def _notify(self, js_call: str) -> None:
+    def _notify(self, js_call: str) -> bool:
         win = self._window
         if win is None:
-            return
+            return True
         try:
             win.evaluate_js(js_call)
+            return True
         except Exception:
             log.warning("evaluate_js failed for %s", js_call.split("(", 1)[0], exc_info=True)
+            return False
 
     # ── Settings ───────────────────────────────────────────────────
 
@@ -410,14 +420,14 @@ class API:
                     "path":         path,
                     "volume_label": result.get("volume_label", ""),
                 }
-                call = f"onScanDone({json.dumps(result, ensure_ascii=False)})"
+                call = f"onScanDone({safe_text.dumps(result)})"
                 self._log_scan_result(scan_id, result, time.monotonic() - started)
             except scanner.ScanCancelled:
                 log.info("Scan cancelled: id=%d after %.1fs", scan_id, time.monotonic() - started)
                 call = "onScanCancelled()"
             except Exception as e:
                 log.exception("Scan failed: id=%d path=%r", scan_id, path)
-                call = f"onScanDone({json.dumps({'error': describe_error(e, 'read')}, ensure_ascii=False)})"
+                call = f"onScanDone({safe_text.dumps({'error': describe_error(e, 'read')})})"
 
             # Release before notifying JS so a scan started from the callback is accepted.
             # A cancelled or failed scan keeps the previous tree, which the UI still shows.
@@ -425,7 +435,8 @@ class API:
                 if scan_data is not None:
                     self._scan_data = scan_data
                 self._scan_cancel = None
-            self._notify(call)
+            if not self._notify(call) and call.startswith("onScanDone("):
+                self._notify("onScanDone(" + safe_text.dumps({"error": _RESULT_NOT_SHOWN["scan"]}) + ")")
 
         threading.Thread(target=_run, daemon=True).start()
         return {"async": True}
@@ -528,7 +539,9 @@ class API:
             result = {"success": False, "error": describe_error(e, "write")}
         with self._export_lock:
             self._exporting = False
-        self._notify(f"onExportDone({json.dumps(result, ensure_ascii=False)})")
+        if not self._notify(f"onExportDone({safe_text.dumps(result)})"):
+            failure = {"success": False, "error": _RESULT_NOT_SHOWN["export"]}
+            self._notify(f"onExportDone({safe_text.dumps(failure)})")
 
     def _write_exports(self, scan: dict, selection: dict, params: dict, out_path: Path) -> dict:
         import exporter  # lazy
@@ -576,7 +589,7 @@ class API:
             try:
                 out_file = _reserve_unique(target)
                 tmp_file = out_file.with_name(out_file.name + ".part")
-                with open(tmp_file, "w", encoding="utf-8") as fh:
+                with open(tmp_file, "w", encoding="utf-8", errors="backslashreplace") as fh:
                     writer(fh, items, meta, include_size=include_size, include_date=include_date,
                            date_pattern=date_pattern, folder_notes=folder_notes, progress=report)
                 os.replace(tmp_file, out_file)

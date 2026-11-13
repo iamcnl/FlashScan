@@ -967,3 +967,27 @@ def test_scanned_drive_exports_to_every_format(tmp_path):
     assert sorted(page.texts("fn")) == ["a.jpg", "b.zip", "top.txt"]
     assert page.texts("fnote-text") == ["keep me"]
     assert page.balanced
+
+
+def test_dates_that_cannot_be_formatted_are_left_blank():
+    assert exporter.fmt_date(1e18) == ""
+    assert exporter.fmt_date(-1e18) == ""
+    assert exporter.fmt_date(float("inf")) == ""
+
+
+def test_a_zero_filetime_date_is_written_even_where_the_platform_refuses_it(monkeypatch):
+    class NoNegativeTimestamps(exporter.datetime):
+        @classmethod
+        def fromtimestamp(cls, ts, tz=None):
+            raise OSError(22, "Invalid argument")
+
+    monkeypatch.setattr(exporter, "datetime", NoNegativeTimestamps)
+
+    assert exporter.fmt_date(-11644473600) == "01. 01. 1601"
+
+
+@pytest.mark.parametrize("fmt", sorted(exporter.WRITERS))
+def test_every_writer_survives_an_unformattable_date(fmt):
+    items = [row(0, "folder", "drive", "", 10, mtime=1e18), row(1, "file", "f.txt", "f.txt", 10, mtime=-1e18)]
+
+    assert "f.txt" in render(exporter.WRITERS[fmt], items)

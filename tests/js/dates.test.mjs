@@ -163,3 +163,13 @@ test("the custom range label follows the date format chosen in settings", async 
     assert.equal(hint(), "05. 11. 2026 \u2013 13. 11. 2026");
   });
 });
+
+test("dates the exporter cannot write are blank in the list too", async () => {
+  await withApp((app) => {
+    const format = (ts) => app.evaluate("DateFmt.setMode('iso'); return DateFmt.format(V.ts);", { ts });
+    assert.equal(format(1e18), "");
+    assert.equal(format(-1e18), "");
+    assert.equal(format(Number.NaN), "");
+    assert.notEqual(format(-11644473600), "");
+  });
+});

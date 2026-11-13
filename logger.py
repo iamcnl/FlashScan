@@ -53,6 +53,7 @@ def _open_handler(directories: list[Path]) -> RotatingFileHandler | None:
                 maxBytes=MAX_BYTES,
                 backupCount=BACKUP_COUNT,
                 encoding="utf-8",
+                errors="backslashreplace",
             )
         except OSError:
             continue

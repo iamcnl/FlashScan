@@ -14,6 +14,8 @@ import os
 import threading
 from pathlib import Path
 
+import safe_text
+
 log = logging.getLogger(__name__)
 
 SETTINGS_FILE   = Path.home() / ".flashscan_settings.json"
@@ -70,7 +72,7 @@ def save(settings: dict) -> None:
             merged = {**_load_unlocked(), **settings}
             _write_atomic(
                 SETTINGS_FILE,
-                json.dumps(merged, ensure_ascii=False, indent=2),
+                safe_text.dumps(merged, indent=2),
             )
     except Exception as e:
         log.warning("Cannot save settings to %s: %s", SETTINGS_FILE, e)
@@ -110,7 +112,7 @@ def save_profile(volume_id: str, data: dict) -> None:
         with _lock:
             _write_atomic(
                 path,
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                safe_text.dumps(payload, separators=(",", ":")),
             )
             _evict_old_profiles()
     except Exception as e:

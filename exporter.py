@@ -13,7 +13,7 @@ from __future__ import annotations
 import html as _html
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -45,7 +45,15 @@ def normalize_date_pattern(pattern) -> str:
 def fmt_date(ts: float, pattern: str = DEFAULT_DATE_PATTERN) -> str:
     if not ts:
         return ""
-    return datetime.fromtimestamp(ts).strftime(pattern)
+    try:
+        moment = datetime.fromtimestamp(ts)
+    except (ValueError, OverflowError, OSError):
+        # Windows refuses dates before 1970, but a zero FILETIME (year 1601) is common; others are garbage
+        try:
+            moment = datetime(1970, 1, 1) + timedelta(seconds=ts)
+        except (ValueError, OverflowError):
+            return ""
+    return moment.strftime(pattern)
 
 
 def _esc(s: str) -> str:
