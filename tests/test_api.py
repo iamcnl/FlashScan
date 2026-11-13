@@ -654,6 +654,35 @@ def test_scan_progress_is_forwarded_until_cancel(app, window, drive, monkeypatch
     assert window.starting("onScanProgress") == ["onScanProgress(1)"]
 
 
+def test_throttle_lets_one_call_through_per_interval():
+    now = [0.0]
+    gate = api._Throttle(0.1, clock=lambda: now[0])
+
+    results = []
+    for moment in (0.0, 0.01, 0.05, 0.099, 0.1, 0.15, 0.25, 0.26):
+        now[0] = moment
+        results.append(gate.ready())
+
+    assert results == [True, False, False, False, True, False, True, False]
+
+
+def test_a_burst_of_scan_progress_reaches_the_window_only_a_few_times(app, window, drive, monkeypatch):
+    real = scanner.scan_path
+
+    def burst(path, depth, incl_hidden, incl_system, progress_cb, cancel):
+        for count in range(100, 100_100, 100):
+            progress_cb(count)
+        return real(path, depth, incl_hidden, incl_system, progress_cb, cancel)
+
+    monkeypatch.setattr(scanner, "scan_path", burst)
+    app.scan(scan_params(drive))
+    window.take("onScanDone")
+
+    sent = window.starting("onScanProgress")
+    assert sent[0] == "onScanProgress(100)"
+    assert len(sent) < 20
+
+
 def test_a_scan_failure_shows_a_sentence_and_logs_the_detail(app, window, drive, monkeypatch, caplog):
     def denied(*args):
         raise PermissionError(errno.EACCES, "Access is denied", str(drive))

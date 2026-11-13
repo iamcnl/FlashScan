@@ -61,6 +61,24 @@ def _folder_state(path) -> str:
     return "folder" if stat.S_ISDIR(mode) else "file"
 
 
+# Each evaluate_js call blocks the scan thread (about 0.6 ms measured, ~20% of a 105k-file scan at one per 100 files).
+_PROGRESS_INTERVAL = 0.1
+
+
+class _Throttle:
+    def __init__(self, interval: float, clock=time.monotonic):
+        self._interval = interval
+        self._clock = clock
+        self._last = None
+
+    def ready(self) -> bool:
+        now = self._clock()
+        if self._last is not None and now - self._last < self._interval:
+            return False
+        self._last = now
+        return True
+
+
 _RESULT_NOT_SHOWN = {
     "scan":   "The scan finished, but its result could not be shown. See the log file for details.",
     "export": "The export finished, but its result could not be shown. Check the output folder and the log file.",
@@ -393,9 +411,11 @@ class API:
             scan_id, path, depth, incl_hidden, incl_system,
         )
 
+        progress_gate = _Throttle(_PROGRESS_INTERVAL)
+
         def progress_cb(count: int):
             win = self._window
-            if win is None or cancel.is_set():
+            if win is None or cancel.is_set() or not progress_gate.ready():
                 return
             try:
                 win.evaluate_js(f"onScanProgress({count})")
