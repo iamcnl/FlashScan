@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import html as _html
 import json
+import logging
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -54,6 +57,10 @@ def fmt_date(ts: float, pattern: str = DEFAULT_DATE_PATTERN) -> str:
         except (ValueError, OverflowError):
             return ""
     return moment.strftime(pattern)
+
+
+def _noun(n: int, word: str) -> str:
+    return word if n == 1 else word + "s"
 
 
 def _esc(s: str) -> str:
@@ -322,8 +329,9 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
 
         # Pre-compute file counts for each folder (including subfolders)
         folder_file_counts: dict[str, int] = {}
+        folder_bytes: dict[str, int] = {}
         folder_stack: list[tuple[int, str]] = []
-        for lvl, typ, _, fpath, *_ in items:
+        for lvl, typ, _, fpath, fsize, *_ in items:
             if typ == "folder":
                 folder_stack = [(l, p) for l, p in folder_stack if l < lvl]
                 folder_file_counts[fpath] = 0
@@ -331,6 +339,7 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
             elif typ == "file":
                 for _, fp in folder_stack:
                     folder_file_counts[fp] = folder_file_counts.get(fp, 0) + 1
+                    folder_bytes[fp] = folder_bytes.get(fp, 0) + fsize
 
         # Reorder: within each folder's children, folders before files
         def reorder(items: list) -> list:
@@ -379,44 +388,48 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
                     i += 1
                     continue
                 close_until(lvl)
-                sz_str = fmt_size(size) if (include_size and size) else ""
+                is_name_only = state == "name"
+                shown_bytes = size if is_name_only else folder_bytes.get(fpath, 0)
+                sz_html = _esc(fmt_size(shown_bytes)) if (include_size and shown_bytes) else ""
                 fc = folder_file_counts.get(fpath, 0)
-                fc_html = f"<b>{fc} files</b>" if fc else ""
-                sz_html = _esc(sz_str) if sz_str else ""
-                fmeta_parts = [p for p in [sz_html, fc_html] if p]
-                fmeta_html = " · ".join(fmeta_parts)
-                if state == "name":
-                    ename = _esc(name)
+                if is_name_only:
+                    count_html = "names only"
+                else:
+                    count_html = f"<b>{fc} {_noun(fc, 'file')}</b>" if fc else ""
+                ename = _esc(name)
+                note = folder_notes.get(fpath, "")
+                note_html = (
+                    f'<span class="fnote-inline" title="{_esc(note)}">'
+                    f'{_NOTE_ICON_SVG}'
+                    f'<span class="fnote-text">{_esc(note)}</span>'
+                    f'</span>'
+                ) if note else ""
+                size_slot = f'<span class="fsz">{sz_html}</span>' if include_size else ""
+                date_slot = '<span class="fdt"></span>' if include_date else ""
+                fmeta = (
+                    f'<span class="fmeta">{note_html}'
+                    f'<span class="fcnt">{count_html}</span>'
+                    f'{size_slot}{date_slot}'
+                    f'</span>'
+                )
+                if is_name_only:
                     emit(
                         f'<div class="folder">'
                         f'<div class="fh fh-nameonly">'
                         f'<span class="farr"></span>'
                         f'<span class="fname fname-muted" title="{ename}/">{ename}/</span>'
-                        f'<span class="fmeta">name only{f" · {_esc(sz_str)}" if sz_str else ""}</span>'
+                        f'{fmeta}'
                         f'</div>'
                         f'</div>'
                     )
                 else:
-                    open_attr = " open" if lvl == 0 else ""
-                    ename = _esc(name)
-                    note = folder_notes.get(fpath, "")
-                    # Note icon comes first; text is hidden until hover
-                    if note:
-                        note_meta = (
-                            f'<span class="fnote-inline" title="{_esc(note)}">'
-                            f'{_NOTE_ICON_SVG}'
-                            f'<span class="fnote-text">{_esc(note)}</span>'
-                            f'</span>'
-                        )
-                        fmeta_with_note = f'{note_meta}{" · " + fmeta_html if fmeta_html else ""}'
-                    else:
-                        fmeta_with_note = fmeta_html
+                    open_attr = " open" if lvl == 1 else ""
                     emit(
                         f'<details class="folder"{open_attr}>'
                         f'<summary class="fh">'
                         f'<span class="farr"></span>'
                         f'<span class="fname" title="{ename}/">{ename}/</span>'
-                        f'<span class="fmeta">{fmeta_with_note}</span>'
+                        f'{fmeta}'
                         f'</summary>'
                         f'<div class="fc">'
                     )
@@ -429,12 +442,13 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
                 dt_str = _esc(fmt_date(mtime, date_pattern)) if (include_date and mtime) else ""
                 ename = _esc(name)
                 root_cls = " fi-root" if not open_levels else ""
+                size_slot = f'<span class="fsz">{sz_str}</span>' if include_size else ""
+                date_slot = f'<span class="fdt">{dt_str}</span>' if include_date else ""
                 emit(
                     f'<div class="fi{root_cls}">'
                     f'{dot(ext)}'
                     f'<span class="fn" title="{ename}">{ename}</span>'
-                    f'<span class="fsz">{sz_str}</span>'
-                    f'<span class="fdt">{dt_str}</span>'
+                    f'{size_slot}{date_slot}'
                     f'</div>'
                 )
             i += 1
@@ -443,7 +457,7 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
 
     name_only = meta.get("name_only_count", 0)
     name_only_stat = (
-        f'<span class="meta-sep">·</span><span class="meta-stat"><span class="meta-n">{name_only}</span> name only</span>'
+        f'<span class="meta-sep">·</span><span class="meta-stat"><span class="meta-n">{name_only}</span> names only</span>'
         if name_only else ""
     )
 
@@ -456,6 +470,8 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
     e_path         = _esc(meta['path'])
     e_timestamp    = _esc(meta['timestamp'])
     e_total_size   = _esc(meta['total_size'])
+    files_word     = _noun(meta['file_count'], 'file')
+    folders_word   = _noun(meta['folder_count'], 'folder')
 
     out.write(f"""<!DOCTYPE html>
 <html lang="en">
@@ -463,7 +479,8 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="generator" content="flashscan">
-<title>{e_display_name or _esc(meta['disk_name'])} — {meta['file_count']} files</title>
+<title>{e_display_name or _esc(meta['disk_name'])} — {meta['file_count']} {files_word}</title>
+<script>{_THEME_JS}</script>
 <style>
 {css_tokens}
 {_EXPORT_CSS}
@@ -476,7 +493,7 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
     <div class="hdr-l">
       <div class="disk-name">{e_display_name}</div>
       <div class="disk-path">{e_path}{f' — {e_display_sub}' if display_sub else ''}</div>
-      <div class="disk-date">scanned {e_timestamp}</div>
+      <div class="disk-date">exported {e_timestamp}</div>
     </div>
     <div class="hdr-r">
       <div class="watermark">flashscan</div>
@@ -484,17 +501,19 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
   </div>
 
   <div class="meta-row">
-    <span class="meta-stat"><span class="meta-n">{meta['file_count']}</span> files</span>
+    <span class="meta-stat"><span class="meta-n">{meta['file_count']}</span> {files_word}</span>
     <span class="meta-sep">·</span>
     <span class="meta-stat"><span class="meta-n">{e_total_size}</span></span>
     <span class="meta-sep">·</span>
-    <span class="meta-stat"><span class="meta-n">{meta['folder_count']}</span> folders</span>
+    <span class="meta-stat"><span class="meta-n">{meta['folder_count']}</span> {folders_word}</span>
     {name_only_stat}
   </div>
 
   <div class="tree-toolbar">
     <button onclick="document.querySelectorAll('.tree details').forEach(d=>d.open=true)" class="tb-btn">expand all</button>
     <button onclick="document.querySelectorAll('.tree details').forEach(d=>d.open=false)" class="tb-btn">collapse all</button>
+    <input id="filter" type="search" class="tb-search" placeholder="filter by name" aria-label="Filter by name">
+    <span id="filter-status" class="tb-status" role="status"></span>
     <button id="btn-theme" class="tb-btn tb-btn-theme" onclick="toggleTheme()">\u263e dark</button>
   </div>
 
@@ -520,11 +539,10 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
 
   <div class="footer">
     <span>flashscan</span>
-    <span>{meta['file_count']} files · {e_total_size} · scanned {e_timestamp}</span>
+    <span>{meta['file_count']} {files_word} · {e_total_size} · exported {e_timestamp}</span>
   </div>
 
 </div>
-<script>{_THEME_JS}</script>
 </body>
 </html>""")
     if progress:
@@ -545,6 +563,7 @@ def _load_export_css() -> str:
         here = Path(__file__).parent
         return (here / "export_templates" / "export.css").read_text(encoding="utf-8")
     except Exception:
+        log.warning("Export CSS could not be loaded; the HTML export will be unstyled", exc_info=True)
         return ""
 
 
@@ -556,9 +575,9 @@ _EXPORT_CSS = """
   --ex-border:   #e4e1d9;
   --ex-border2:  #dddad2;
   --ex-text:     #1a1a18;
-  --ex-text2:    #555;
-  --ex-muted:    #999;
-  --ex-subtle:   #c4c1b8;
+  --ex-text2:    #444;
+  --ex-muted:    #5c5951;
+  --ex-subtle:   #6a675d;
   --ex-faint:    #d8d5cc;
 }
 [data-theme="dark"] {
@@ -567,13 +586,14 @@ _EXPORT_CSS = """
   --ex-border:   rgba(255,255,255,.07);
   --ex-border2:  rgba(255,255,255,.05);
   --ex-text:     #d0ccc4;
-  --ex-text2:    #a0a09a;
-  --ex-muted:    #6a6a64;
-  --ex-subtle:   #484844;
+  --ex-text2:    #bdbdb5;
+  --ex-muted:    #a8a8a1;
+  --ex-subtle:   #96968f;
   --ex-faint:    rgba(255,255,255,.04);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--ex-bg); color: var(--ex-text); font-size: 13px; transition: background .2s, color .2s; }
 .page { max-width: 800px; margin: 0 auto; padding: 48px 28px 80px; }
 
@@ -600,6 +620,11 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--ex-b
           text-decoration: underline; text-underline-offset: 2px;
           text-decoration-color: var(--ex-subtle); }
 .tb-btn:hover { color: var(--ex-text2); text-decoration-color: var(--ex-muted); }
+.tb-search { font: inherit; font-size: 11.5px; width: 170px; padding: 3px 8px;
+             border: 1px solid var(--ex-border); border-radius: 4px;
+             background: transparent; color: var(--ex-text); }
+.tb-search::placeholder { color: var(--ex-muted); }
+.tb-status { font-size: 11px; color: var(--ex-muted); }
 .tb-btn-theme { margin-left: auto; text-decoration: none; font-size: 11px; color: var(--ex-muted); }
 .tb-btn-theme:hover { color: var(--ex-text2); }
 
@@ -611,7 +636,7 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--ex-b
 .fh::-webkit-details-marker { display: none; }
 .fh-nameonly { cursor: default; }
 .fh-nameonly .fname { color: var(--ex-subtle); font-weight: 400; }
-.fh-nameonly .fmeta { font-style: italic; }
+.fh-nameonly .fcnt { font-style: italic; }
 .farr { font-size: 14px; color: var(--ex-subtle); flex-shrink: 0; width: 16px;
         display: inline-block; transition: transform .15s; }
 .farr::before { content: '▸'; }
@@ -620,7 +645,8 @@ details:not([open]) > .fh > .farr { transform: rotate(0deg); }
 .fname { font-size: 13.5px; font-weight: 600; color: var(--ex-text); flex: 1;
          min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fname-muted { color: var(--ex-subtle); font-weight: 400; }
-.fmeta { font-size: 11px; color: var(--ex-subtle); flex-shrink: 0; white-space: nowrap; min-width: 120px; text-align: right; }
+.fmeta { display: flex; align-items: baseline; flex-shrink: 0; white-space: nowrap; }
+.fcnt { font-size: 11px; color: var(--ex-subtle); min-width: 58px; text-align: right; }
 .fc { margin-left: 10px; padding-left: 14px; border-left: 1px solid var(--ex-faint); }
 
 /* Files */
@@ -630,16 +656,50 @@ details:not([open]) > .fh > .farr { transform: rotate(0deg); }
 .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-right: 9px; opacity: .8; }
 .fn { font-size: 12.5px; color: var(--ex-text2); font-family: 'Courier New', monospace;
       flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fsz { font-size: 11px; color: var(--ex-subtle); margin-left: 12px; flex-shrink: 0; white-space: nowrap; min-width: 72px; text-align: right; }
-.fdt { font-size: 11px; color: var(--ex-muted); margin-left: 8px; flex-shrink: 0; white-space: nowrap; min-width: 80px; text-align: right; }
+.fsz { font-size: 11px; color: var(--ex-subtle); margin-left: 8px; flex-shrink: 0; white-space: nowrap; min-width: 60px; text-align: right; }
+.fdt { font-size: 11px; color: var(--ex-muted); margin-left: 6px; flex-shrink: 0; white-space: nowrap; min-width: 68px; text-align: right; }
 
 /* ── Folder note — icon always visible, text on hover ── */
-.fnote-inline { display: inline-flex; align-items: center; gap: 3px; color: var(--ex-text2); cursor: default; }
+.fnote-inline { display: inline-flex; align-items: center; gap: 3px; margin-right: 10px; color: var(--ex-text2); cursor: default; }
 .fnote-icon { flex-shrink: 0; vertical-align: middle; opacity: .55; transition: opacity .15s; }
 .fnote-inline:hover .fnote-icon { opacity: 1; }
 .fnote-text { font-size: 11px; color: var(--ex-text2); max-width: 0; overflow: hidden;
               white-space: nowrap; opacity: 0; transition: max-width .2s ease, opacity .15s ease; }
 .fnote-inline:hover .fnote-text { max-width: 300px; opacity: 1; }
+
+/* ── Narrow screens: name on its own line, details underneath ── */
+@media (max-width: 600px) {
+  .page { padding: 20px 12px 48px; }
+  .hdr { flex-direction: column; gap: 10px; }
+  .hdr-r { align-items: flex-start; }
+  .disk-name, .disk-path { overflow-wrap: anywhere; }
+  .tree-toolbar { flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+  .tb-btn { white-space: nowrap; padding: 6px 0; }
+  .tb-search { order: 3; flex: 1 1 100%; width: auto; padding: 8px 10px; font-size: 16px; }
+  .tb-status { order: 4; }
+  .fc { margin-left: 4px; padding-left: 8px; }
+  .fh { flex-wrap: wrap; padding: 8px 4px; }
+  .fname { flex: 1 1 calc(100% - 24px); white-space: normal; overflow-wrap: anywhere; }
+  .fmeta { flex: 1 1 100%; flex-wrap: wrap; padding-left: 22px; white-space: normal; }
+  .fcnt, .fsz, .fdt { min-width: 0; margin-left: 0; text-align: left; }
+  .fcnt:empty, .fsz:empty, .fdt:empty { display: none; }
+  .fcnt:not(:empty) + .fsz:not(:empty)::before { content: '·'; margin: 0 6px; }
+  .fnote-inline { margin-right: 8px; }
+  .fnote-text { max-width: none; opacity: 1; white-space: normal; }
+  .fi { flex-wrap: wrap; align-items: flex-start; padding-top: 6px; padding-bottom: 6px; }
+  .dot { margin-top: 6px; }
+  .fn { flex: 1 1 calc(100% - 18px); white-space: normal; overflow-wrap: anywhere; }
+  .fi .fsz, .fi .fdt { margin-left: 16px; }
+  .fi .fsz:not(:empty) + .fdt { margin-left: 0; }
+  .fi .fsz:not(:empty) + .fdt:not(:empty)::before { content: '·'; margin: 0 6px; }
+}
+
+/* ── Print ── */
+@media print {
+  .tree-toolbar { display: none; }
+  .page { max-width: none; padding: 0; }
+  .fh { break-inside: avoid; }
+}
 
 /* ── Legend ── */
 .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 22px;
@@ -653,21 +713,85 @@ details:not([open]) > .fh > .farr { transform: rotate(0deg); }
 """
 
 _THEME_JS = """
-  function applyTheme(theme) {
-    if (theme === 'dark') {
-      document.documentElement.dataset.theme = 'dark';
-      document.getElementById('btn-theme').textContent = '\u2600 light';
-    } else {
-      delete document.documentElement.dataset.theme;
-      document.getElementById('btn-theme').textContent = '\u263e dark';
+(function () {
+  var root = document.documentElement;
+  var saved = null;
+  try { saved = localStorage.getItem('flashscan-theme'); } catch (e) {}
+  var prefersDark = !!window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+  if (saved ? saved === 'dark' : prefersDark) {
+    root.dataset.theme = 'dark';
+  }
+
+  function syncThemeButton() {
+    document.getElementById('btn-theme').textContent =
+      root.dataset.theme === 'dark' ? '\u2600 light' : '\u263e dark';
+  }
+
+  window.toggleTheme = function () {
+    var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    if (next === 'dark') root.dataset.theme = 'dark'; else delete root.dataset.theme;
+    try { localStorage.setItem('flashscan-theme', next); } catch (e) {}
+    syncThemeButton();
+  };
+
+  function nameOf(el) {
+    return el.querySelector('.fn, .fname').textContent.toLowerCase();
+  }
+
+  var savedOpen = null;
+
+  function restoreFolders() {
+    if (!savedOpen) return;
+    document.querySelectorAll('.tree details').forEach(function (d, i) { d.open = savedOpen[i]; });
+    savedOpen = null;
+  }
+
+  function filterTree(query) {
+    var tree = document.querySelector('.tree');
+    var status = document.getElementById('filter-status');
+    tree.querySelectorAll('[hidden]').forEach(function (el) { el.hidden = false; });
+    if (!query) {
+      restoreFolders();
+      status.textContent = '';
+      return;
     }
-    try { localStorage.setItem('flashscan-theme', theme); } catch(e) {}
+    if (!savedOpen) {
+      savedOpen = Array.prototype.map.call(tree.querySelectorAll('details'), function (d) { return d.open; });
+    }
+    var matches = 0;
+    tree.querySelectorAll('.fi, div.folder').forEach(function (el) {
+      var hit = nameOf(el).indexOf(query) >= 0;
+      el.hidden = !hit;
+      if (hit) matches++;
+    });
+    var folders = tree.querySelectorAll('details');
+    for (var i = folders.length - 1; i >= 0; i--) {
+      var folder = folders[i];
+      var selfMatch = nameOf(folder).indexOf(query) >= 0;
+      if (selfMatch) matches++;
+      if (folder.querySelector('.fi:not([hidden]), .folder:not([hidden])')) {
+        folder.open = true;
+      } else if (selfMatch) {
+        folder.querySelectorAll('[hidden]').forEach(function (el) { el.hidden = false; });
+        folder.open = false;
+      } else {
+        folder.hidden = true;
+      }
+    }
+    status.textContent = matches ? matches + (matches === 1 ? ' match' : ' matches') : 'no matches';
   }
-  function toggleTheme() {
-    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
-  }
-  try {
-    var saved = localStorage.getItem('flashscan-theme');
-    if (saved) applyTheme(saved);
-  } catch(e) {}
+
+  document.addEventListener('DOMContentLoaded', function () {
+    syncThemeButton();
+    var box = document.getElementById('filter');
+    function applyFilter() { filterTree(box.value.trim().toLowerCase()); }
+    box.addEventListener('input', applyFilter);
+    box.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && box.value) { box.value = ''; applyFilter(); }
+    });
+    window.addEventListener('beforeprint', function () {
+      document.querySelectorAll('.tree details').forEach(function (d) { d.open = true; });
+    });
+  });
+})();
 """

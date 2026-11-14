@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
@@ -740,7 +741,7 @@ def test_hostile_header_fields_cannot_inject_markup():
 
     assert page.texts("disk-name") == [meta["volume_label"]]
     assert page.texts("disk-path") == [f"{meta['path']} — {meta['disk_name']}"]
-    assert page.texts("disk-date") == ["scanned <s>t"]
+    assert page.texts("disk-date") == ["exported <s>t"]
     assert meta["total_size"] in page.texts("meta-n")
     assert meta["volume_label"] in page.title
     assert not FORBIDDEN_TAGS & set(page.tag_names())
@@ -754,7 +755,7 @@ def test_header_with_a_volume_label():
 
     assert page.texts("disk-name") == ["MY USB"]
     assert page.texts("disk-path") == ["E:\\ — E:"]
-    assert page.texts("disk-date") == ["scanned 2024-03-05 12:00"]
+    assert page.texts("disk-date") == ["exported 2024-03-05 12:00"]
     assert page.title == "MY USB — 2 files"
 
 
@@ -812,13 +813,12 @@ def test_deep_nesting_closes_the_right_number_of_levels():
     assert page.balanced
 
 
-def test_root_folder_is_not_rendered_and_folders_start_collapsed():
-    tree = make_tree("a/", "a/x.bin", "b/", "b/y.bin")
+def test_root_folder_is_not_rendered_and_top_level_folders_start_open():
+    tree = make_tree("a/", "a/x.bin", "a/inner/", "a/inner/z.bin", "b/", "b/y.bin")
     html, page = html_of(export(tree))
 
-    assert page.texts("fname") == ["a/", "b/"]
-    assert page.count("details") == 2
-    assert not any("open" in a for t, a in page.tags if t == "details")
+    assert page.texts("fname") == ["a/", "inner/", "b/"]
+    assert [("open" in a) for t, a in page.tags if t == "details"] == [True, False, True]
     assert "drive" not in page.texts("fname")
 
 
@@ -826,16 +826,17 @@ def test_folder_meta_shows_size_and_recursive_file_count():
     tree = make_tree("a/", "a/x.bin", "a/b/", "a/b/y.bin", "a/b/z.bin", "empty/")
     html, _page = html_of(export(tree))
 
-    assert '<span class="fmeta">30 B · <b>3 files</b></span>' in html
-    assert '<span class="fmeta">20 B · <b>2 files</b></span>' in html
-    assert '<span class="fmeta"></span>' in html
+    assert '<span class="fcnt"><b>3 files</b></span><span class="fsz">30 B</span><span class="fdt"></span>' in html
+    assert '<span class="fcnt"><b>2 files</b></span><span class="fsz">20 B</span><span class="fdt"></span>' in html
+    assert '<span class="fcnt"></span><span class="fsz"></span><span class="fdt"></span>' in html
 
 
 def test_folder_meta_without_sizes():
     tree = make_tree("a/", "a/x.bin", "a/y.bin")
     html, _page = html_of(export(tree), include_size=False)
 
-    assert '<span class="fmeta"><b>2 files</b></span>' in html
+    assert '<span class="fcnt"><b>2 files</b></span><span class="fdt"></span>' in html
+    assert 'class="fsz"' not in html
 
 
 def test_name_only_folder_has_no_contents_and_is_marked():
@@ -845,7 +846,8 @@ def test_name_only_folder_has_no_contents_and_is_marked():
 
     assert page.count("details") == 0
     assert page.texts("fname-muted") == ["a/"]
-    assert page.texts("fmeta") == ["name only · 20 B"]
+    assert page.texts("fcnt") == ["names only"]
+    assert page.texts("fsz") == ["20 B", "10 B"]
     assert page.texts("fn") == ["z.txt"]
     assert page.balanced
 
@@ -856,11 +858,40 @@ def test_file_columns_respect_the_toggles_and_empty_values():
     assert f'<span class="fsz">10 B</span><span class="fdt">{DATE}</span>' in html
 
     html, _page = html_of(export(tree), include_size=False, include_date=False)
-    assert '<span class="fsz"></span><span class="fdt"></span>' in html
+    assert 'class="fsz"' not in html and 'class="fdt"' not in html
+    assert '<span class="fn" title="a.txt">a.txt</span></div>' in html
 
     empty = [row(0, "folder", "drive", "", 0), row(1, "file", "e.txt", "e.txt", 0, mtime=0)]
     html, _page = html_of(empty)
     assert '<span class="fsz"></span><span class="fdt"></span>' in html
+
+
+def test_each_column_is_written_only_when_its_option_is_on():
+    tree = make_tree("a/", "a/x.bin")
+
+    html, page = html_of(export(tree), include_date=False)
+    assert page.count("fsz") == 0 and 'class="fdt"' not in html
+    assert page.texts("fsz") == ["10 B", "10 B"]
+    assert '<span class="fmeta"><span class="fcnt"><b>1 file</b></span><span class="fsz">10 B</span></span>' in html
+
+    html, page = html_of(export(tree), include_size=False)
+    assert 'class="fsz"' not in html
+    assert html.count('class="fdt"') == 2
+
+    html, _page = html_of(export(tree), include_size=False, include_date=False)
+    assert '<span class="fmeta"><span class="fcnt"><b>1 file</b></span></span>' in html
+
+
+def test_narrow_screen_rules_stack_details_under_the_name():
+    html, _page = html_of(GOLDEN_ITEMS)
+    block = re.search(r"@media \(max-width: 600px\) \{(.*?)\n\}", html, re.S).group(1)
+
+    assert ".tree-toolbar { flex-wrap: wrap;" in block
+    assert "font-size: 16px" in block
+    assert ".fn { flex: 1 1 calc(100% - 18px); white-space: normal;" in block
+    assert ".fname { flex: 1 1 calc(100% - 24px); white-space: normal;" in block
+    assert ".fmeta { flex: 1 1 100%;" in block
+    assert ".fnote-text { max-width: none; opacity: 1;" in block
 
 
 def test_folder_note_is_rendered_as_icon_plus_text():
@@ -870,6 +901,80 @@ def test_folder_note_is_rendered_as_icon_plus_text():
     assert page.texts("fnote-text") == ["holiday pics"]
     assert page.attr("fnote-inline", "title") == ["holiday pics"]
     assert page.count("svg") == 1
+
+
+def test_name_only_folder_keeps_its_note():
+    tree = make_tree("a/", "a/x.bin")
+    html, page = html_of(export(tree, {path_of("a"): "name"}), folder_notes={path_of("a"): "originals on the NAS"})
+
+    assert page.texts("fnote-text") == ["originals on the NAS"]
+    assert page.attr("fnote-inline", "title") == ["originals on the NAS"]
+    assert page.texts("fcnt") == ["names only"]
+    assert page.texts("fsz") == ["10 B"]
+    assert page.balanced
+
+
+def test_folder_rows_end_in_the_same_size_and_date_columns_as_file_rows():
+    tree = make_tree("a/", "a/x.bin", "a/b/", "a/b/y.bin", "n/", "n/z.bin", "top.bin")
+    html, page = html_of(export(tree, {path_of("n"): "name"}))
+
+    folder_rows = re.findall(
+        r'<span class="fcnt">[^<]*(?:<b>[^<]*</b>)?</span><span class="fsz">[^<]*</span><span class="fdt"></span></span>', html)
+    assert len(folder_rows) == page.count("details") + page.texts("fcnt").count("names only")
+    assert page.count("details") == 2
+    assert len(page.texts("fsz")) == 6
+
+
+def test_folder_size_counts_only_exported_files():
+    tree = make_tree("a/", "a/x.bin", "a/y.bin")
+    selected = {path_of("a/x.bin")}
+    items = list(exporter.iter_export(tree, {}, selected))
+    html, _page = html_of(items)
+
+    assert '<span class="fcnt"><b>1 file</b></span><span class="fsz">10 B</span>' in html
+    assert "20 B" not in html
+
+
+def test_counts_use_singular_for_one():
+    tree = make_tree("a/", "a/x.bin")
+    html, page = html_of(export(tree), {**META, "file_count": 1, "folder_count": 1})
+
+    assert "<b>1 file</b>" in html
+    assert "1 files" not in html and "1 folders" not in html
+    assert page.title.endswith("— 1 file")
+
+
+def test_page_has_a_filter_box_and_print_rules():
+    html, page = html_of(GOLDEN_ITEMS)
+
+    assert page.attr("tb-search", "type") == ["search"]
+    assert page.attr("tb-search", "aria-label") == ["Filter by name"]
+    assert "@media print" in html
+    assert "[hidden] { display: none !important; }" in html
+
+
+def test_filter_box_has_a_live_status_region():
+    html, page = html_of(GOLDEN_ITEMS)
+
+    assert page.attr("tb-status", "role") == ["status"]
+    assert page.attr("tb-status", "id") == ["filter-status"]
+
+
+def test_theme_script_runs_in_the_head_and_follows_the_system_setting():
+    html, page = html_of(GOLDEN_ITEMS)
+
+    assert html.index("<script>") < html.index("<style>") < html.index("<body>")
+    assert "prefers-color-scheme: dark" in html
+    assert page.count("script") == 1
+
+
+def test_missing_export_css_is_logged(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(exporter, "__file__", str(tmp_path / "exporter.py"))
+
+    with caplog.at_level("WARNING", logger="exporter"):
+        assert exporter._load_export_css() == ""
+
+    assert "Export CSS could not be loaded" in caplog.text
 
 
 def test_legend_lists_only_used_categories_in_a_fixed_order():
