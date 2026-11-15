@@ -166,7 +166,7 @@ def iter_export(tree: list, folder_states: dict, selected_files: set,
 
 # ── Markdown ──────────────────────────────────────────────────────
 
-def _md_folder_info(state: str, files: int, shown_bytes: int, include_size: bool) -> str:
+def _folder_info(state: str, files: int, shown_bytes: int, include_size: bool) -> str:
     if state == "name":
         parts = ["names only"]
     else:
@@ -232,7 +232,7 @@ def write_md_list(out, items: list, meta, *, include_size=True, include_date=Tru
             if lvl > 0:
                 note = _md_esc(folder_notes.get(fpath, ""))
                 shown_bytes = size if state == "name" else folder_bytes.get(fpath, 0)
-                info = _md_folder_info(state, folder_files.get(fpath, 0), shown_bytes, include_size)
+                info = _folder_info(state, folder_files.get(fpath, 0), shown_bytes, include_size)
                 if lvl == 1:
                     blank()
                     put(f"## {name}")
@@ -306,7 +306,7 @@ def write_md_toggles(out, items: list, meta, *, include_size=True, include_date=
                 close_toggles(lvl)
                 note = _md_esc(folder_notes.get(fpath, ""))
                 shown_bytes = size if state == "name" else folder_bytes.get(fpath, 0)
-                info = _md_folder_info(state, folder_files.get(fpath, 0), shown_bytes, include_size)
+                info = _folder_info(state, folder_files.get(fpath, 0), shown_bytes, include_size)
                 has_children = n < len(items) and items[n][0] > lvl
                 if state == "name" or not has_children:
                     tail = f" — *{note}*" if note else ""
@@ -351,34 +351,79 @@ def write_md(out, items: list, meta, *, md_toggles=True, **options) -> None:
 
 # ── TXT ──────────────────────────────────────────────────────────
 
+_TXT_NAME_COLUMN_MAX = 56
+
+
+def _one_line(text: str) -> str:
+    return _LINE_BREAKS.sub(" ", str(text))
+
+
 def write_txt(out, items: list, meta, *, include_size=True, include_date=True,
               date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
     folder_notes = folder_notes or {}
+    folder_files, folder_bytes = _folder_totals(items)
+    file_rows = [(lvl, _one_line(name), fmt_size(size)) for lvl, typ, name, _, size, *_ in items if typ == "file"]
+    size_width = max((len(size) for _, _, size in file_rows), default=0)
+    name_width = min(
+        max((2 * (lvl - 1) + len(name) for lvl, name, _ in file_rows), default=0), _TXT_NAME_COLUMN_MAX
+    )
     label = meta.get('volume_label', '')
     title = f"{label} ({meta['disk_name']})" if label else meta['disk_name']
     emit = _Lines(out).add
+    blank_pending = False
+    last_folder_lvl: int | None = None
+
+    def put(line: str) -> None:
+        nonlocal blank_pending
+        if blank_pending:
+            emit("")
+            blank_pending = False
+        emit(line)
+
+    files_n, folders_n = meta['file_count'], meta['folder_count']
+    contents = [f"{files_n} {_noun(files_n, 'file')}", f"{folders_n} {_noun(folders_n, 'folder')}", meta['total_size']]
+    if meta.get('name_only_count'):
+        contents.append(f"{meta['name_only_count']} names only")
+    bar = "=" * 60
     for line in (
-        "=" * 60,
-        f"  {title.upper()} — FILE LIST",
-        f"  {meta['timestamp']}  |  {meta['path']}",
-        f"  {meta['file_count']} files  |  {meta['total_size']}",
-        "=" * 60 + "\n",
+        bar,
+        f"  {title} — file list",
+        f"  Exported {meta['timestamp']}  |  {meta['path']}",
+        f"  {'  |  '.join(contents)}",
+        bar,
     ):
         emit(line)
+    blank_pending = True
+
     for n, (lvl, typ, name, fpath, size, mtime, state) in enumerate(items, 1):
-        indent = "  " * lvl
+        name = _one_line(name)
+        indent = "  " * max(lvl - 1, 0)
         if typ == "folder":
-            suffix = "  [name only]" if state == "name" else ""
-            emit(f"\n{indent}[{name}/{suffix}]")
-            note = folder_notes.get(fpath, "")
-            if note:
-                emit(f"{indent}  > {note}")
+            if lvl > 0:
+                shown_bytes = size if state == "name" else folder_bytes.get(fpath, 0)
+                info = _folder_info(state, folder_files.get(fpath, 0), shown_bytes, include_size)
+                if last_folder_lvl is None or lvl <= last_folder_lvl:
+                    blank_pending = True
+                put(f"{indent}[{name}/]  {info}")
+                note = _one_line(folder_notes.get(fpath, ""))
+                if note:
+                    put(f"{indent}  > {note}")
+                last_folder_lvl = lvl
         else:
-            sz = f"  {fmt_size(size):<10}" if (include_size and size) else ""
-            dt = f"  {fmt_date(mtime, date_pattern)}" if (include_date and mtime) else ""
-            emit(f"{indent}  {name}{sz}{dt}")
+            cells = []
+            if include_size:
+                cells.append(fmt_size(size).rjust(size_width))
+            date = fmt_date(mtime, date_pattern) if (include_date and mtime) else ""
+            if date:
+                cells.append(date)
+            line = f"{indent}{name}"
+            if cells:
+                line = f"{line:<{name_width}}  {'  '.join(cells)}"
+            put(line)
+            last_folder_lvl = None
         if progress and n % PROGRESS_EVERY == 0:
             progress(n)
+    out.write("\n")
     if progress:
         progress(len(items))
 
@@ -549,7 +594,7 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
                 if is_name_only:
                     count_html = "names only"
                 else:
-                    count_html = f"<b>{fc} {_noun(fc, 'file')}</b>" if fc else ""
+                    count_html = f"<b>{fc} {_noun(fc, 'file')}</b>" if fc else "empty"
                 ename = _esc(name)
                 note = folder_notes.get(fpath, "")
                 note_html = (
@@ -592,7 +637,7 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
             elif typ == "file":
                 close_until(lvl)
                 ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-                sz_str = fmt_size(size) if (include_size and size) else ""
+                sz_str = fmt_size(size) if include_size else ""
                 dt_str = _esc(fmt_date(mtime, date_pattern)) if (include_date and mtime) else ""
                 ename = _esc(name)
                 root_cls = " fi-root" if not open_levels else ""

@@ -753,34 +753,144 @@ def test_txt_golden_output():
 
     assert out == "\n".join([
         "=" * 60,
-        "  MY USB (E:) — FILE LIST",
-        "  2024-03-05 12:00  |  E:\\",
-        "  2 files  |  2.0 KB",
+        "  MY USB (E:) — file list",
+        "  Exported 2024-03-05 12:00  |  E:\\",
+        "  2 files  |  3 folders  |  2.0 KB",
         "=" * 60,
         "",
+        f"{'z.txt':<9}  {'10 B':>6}  {DATE}",
         "",
-        "[drive/]",
-        f"    z.txt  {'10 B':<10}  {DATE}",
+        "[a/]  1 file · 2.0 KB",
+        "  > holiday pics",
+        f"{'  one.txt':<9}  {'2.0 KB':>6}  {DATE}",
         "",
-        "  [a/]",
-        "    > holiday pics",
-        f"      one.txt  {'2.0 KB':<10}  {DATE}",
+        "  [deep/]  names only",
         "",
-        "    [deep/  [name only]]",
     ])
 
 
-def test_txt_title_without_a_volume_label():
-    out = render(exporter.write_txt, [], {**META, "volume_label": ""})
+def test_txt_title_keeps_its_case_and_works_without_a_volume_label():
+    assert render(exporter.write_txt, [], META).splitlines()[1] == "  MY USB (E:) — file list"
+    assert render(exporter.write_txt, [], {**META, "volume_label": ""}).splitlines()[1] == "  E: — file list"
 
-    assert out.splitlines()[1] == "  E: — FILE LIST"
+
+def test_txt_header_counts_use_singular_and_names_only():
+    meta = {**META, "file_count": 1, "folder_count": 1, "name_only_count": 2}
+
+    assert "  1 file  |  1 folder  |  2.0 KB  |  2 names only" in render(exporter.write_txt, [], meta)
+
+
+def test_txt_has_no_line_for_the_root_folder_and_starts_with_its_files():
+    tree = make_tree("top.bin", "a/", "a/x.bin")
+    out = render(exporter.write_txt, export(tree))
+
+    assert "[drive/]" not in out and "/]" in out
+    assert any(line.startswith("top.bin") for line in out.splitlines())
+    assert "\n[a/]  1 file · 10 B\n" in out
+
+
+def test_txt_folder_lines_show_count_size_and_state():
+    tree = make_tree("a/", "a/x.bin", "a/y.bin", "n/", "n/z.bin", "e/")
+    out = render(exporter.write_txt, export(tree, states={path_of("n"): "name"}))
+
+    assert "[a/]  2 files · 20 B" in out
+    assert "[n/]  names only · 10 B" in out
+    assert "[e/]  empty" in out
+    assert "names only" in render(exporter.write_txt, export(tree, states={path_of("n"): "name"}), include_size=False)
+    assert "10 B" not in render(exporter.write_txt, export(tree, states={path_of("n"): "name"}), include_size=False)
+
+
+def test_txt_folder_size_counts_only_exported_files():
+    tree = make_tree("a/", "a/x.bin", "a/y.bin")
+    out = render(exporter.write_txt, export(tree, files={path_of("a/x.bin")}))
+
+    assert "[a/]  1 file · 10 B" in out
+
+
+def test_txt_columns_line_up_across_depths_and_sizes():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "file", "a.txt", "a.txt", 5),
+        row(1, "folder", "d", "d", 0),
+        row(2, "file", "a-much-longer-name.txt", "d/b", 1_500_000),
+    ]
+    lines = [line for line in render(exporter.write_txt, items).splitlines() if DATE in line]
+
+    assert len({line.index(DATE) for line in lines}) == 1
+    assert len({line.index(DATE) - 2 for line in lines}) == 1
+    assert lines[0].rstrip().endswith(DATE) and "5 B" in lines[0] and "1.4 MB" in lines[1]
+    assert lines[0].index("5 B") + 3 == lines[1].index("1.4 MB") + 6
+
+
+def test_txt_long_names_do_not_push_the_columns_past_the_cap():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "file", "short.txt", "s", 1),
+        row(1, "file", "x" * 90 + ".txt", "l", 1),
+    ]
+    short, long = [line for line in render(exporter.write_txt, items).splitlines() if DATE in line]
+
+    assert "x" * 90 in long
+    assert short.index(DATE) == 56 + 2 + len("1 B") + 2
 
 
 def test_txt_omits_size_and_date_when_asked():
     out = render(exporter.write_txt, GOLDEN_ITEMS, include_size=False, include_date=False)
 
-    assert "z.txt" in out
+    assert "\nz.txt\n" in out
     assert "10 B" not in out and DATE not in out
+    assert f"{'z.txt':<9}  {DATE}" in render(exporter.write_txt, GOLDEN_ITEMS, include_size=False)
+
+
+def test_txt_shows_zero_byte_files_and_skips_missing_dates():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "file", "empty.txt", "e", 0, mtime=0),
+    ]
+
+    assert "empty.txt  0 B\n" in render(exporter.write_txt, items)
+
+
+def test_txt_keeps_consecutive_folder_lines_together():
+    tree = make_tree("a/", "a/b/", "a/b/c/", "a/b/c/x.bin")
+    out = render(exporter.write_txt, export(tree))
+
+    assert "[a/]  1 file · 10 B\n  [b/]  1 file · 10 B\n    [c/]  1 file · 10 B\n" in out
+
+
+def test_txt_separates_sibling_folders_with_a_blank_line():
+    tree = make_tree("a/", "a/b/", "c/")
+    out = render(exporter.write_txt, export(tree))
+
+    assert "  [b/]  empty\n\n[c/]  empty\n" in out
+    assert "[a/]  empty\n  [b/]  empty\n" in out
+
+
+def test_txt_puts_notes_under_their_folder_on_one_line():
+    tree = make_tree("a/", "a/x.bin")
+    out = render(exporter.write_txt, export(tree), folder_notes={path_of("a"): "first\nsecond"})
+
+    assert "[a/]  1 file · 10 B\n  > first second\n" in out
+
+
+def test_txt_flattens_line_breaks_in_names():
+    items = [row(0, "folder", "drive", "", 0), row(1, "file", "two\nlines.txt", "x", 1)]
+
+    assert "two lines.txt" in render(exporter.write_txt, items)
+
+
+def test_txt_output_ends_with_exactly_one_newline():
+    for items in ([], GOLDEN_ITEMS, [row(0, "folder", "drive", "", 0), row(1, "folder", "e", "e", 0)]):
+        out = render(exporter.write_txt, items)
+
+        assert out.endswith("\n") and not out.endswith("\n\n")
+
+
+def test_txt_reports_progress():
+    seen = []
+    render(exporter.write_txt, GOLDEN_ITEMS, progress=seen.append)
+
+    assert seen[-1] == len(GOLDEN_ITEMS)
 
 
 # ── JSON ─────────────────────────────────────────────────────────
@@ -1066,7 +1176,7 @@ def test_folder_meta_shows_size_and_recursive_file_count():
 
     assert '<span class="fcnt"><b>3 files</b></span><span class="fsz">30 B</span><span class="fdt"></span>' in html
     assert '<span class="fcnt"><b>2 files</b></span><span class="fsz">20 B</span><span class="fdt"></span>' in html
-    assert '<span class="fcnt"></span><span class="fsz"></span><span class="fdt"></span>' in html
+    assert '<span class="fcnt">empty</span><span class="fsz"></span><span class="fdt"></span>' in html
 
 
 def test_folder_meta_without_sizes():
@@ -1101,7 +1211,7 @@ def test_file_columns_respect_the_toggles_and_empty_values():
 
     empty = [row(0, "folder", "drive", "", 0), row(1, "file", "e.txt", "e.txt", 0, mtime=0)]
     html, _page = html_of(empty)
-    assert '<span class="fsz"></span><span class="fdt"></span>' in html
+    assert '<span class="fsz">0 B</span><span class="fdt"></span>' in html
 
 
 def test_each_column_is_written_only_when_its_option_is_on():

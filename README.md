@@ -61,7 +61,7 @@ Download `FlashScan.exe` from the [latest release](https://github.com/iamcnl/Fla
 
   - **Markdown**: A readable document. By default each folder is a collapsible toggle with a table of its files (works in Notion, GitHub and VS Code); an option switches to a plain nested list for any viewer.
   - **JSON**: Structured data ideal for scripting and programmatic use.
-  - **TXT**: A simple plain text file for maximum compatibility.
+  - **TXT**: A plain text file with aligned size and date columns, for maximum compatibility.
 - **Context Menu**: Right-click any file or folder for quick actions — Open, Show in Explorer, Copy Path, Copy Name, and Properties. Opening a file that runs code (such as `.exe`, `.bat`, `.ps1`, `.lnk`) asks for confirmation first.
 - **Keyboard Shortcuts**: Full keyboard navigation for power users (see [Keyboard Shortcuts](#keyboard-shortcuts)).
 - **Persistent Settings**: Remembers your last used paths, theme, sorting, and scan options between sessions.
