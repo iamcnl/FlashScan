@@ -966,6 +966,7 @@
   user-select: none;
 }
 .adv-export-check:hover span { color: var(--text); }
+.adv-export-check[hidden] { display: none; }
 
 /* ── Summary inline filename editing ─────────────────────────── */
 .summary-output-label {

@@ -69,6 +69,11 @@ const Export = {
       .filter(Boolean);
   },
 
+  syncMdOption() {
+    const row = document.getElementById('adv-md-toggles');
+    if (row) row.hidden = !this._selectedFormats().includes('MD');
+  },
+
   _advOptions() {
     return {
       include_size: document.getElementById('chk-include-size')?.checked !== false,
@@ -332,3 +337,5 @@ const Export = {
 
 function onExportProgress(done, total, fmt) { Export.onProgress(done, total, fmt); }
 function onExportDone(result) { Export.onDone(result); }
+
+/** fmtSize available globally (defined in tree.js, loaded earlier) */

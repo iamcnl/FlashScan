@@ -128,11 +128,21 @@ function syncFmtCell(cell) {
   cell.querySelector('.fmt-dot')?.classList.toggle('on', on);
 }
 
+function applyFormats(formats) {
+  document.querySelectorAll('.fmt-cell').forEach(cell => {
+    const input = cell.querySelector('.fmt-input');
+    if (input) input.checked = formats.includes(cell.dataset.fmt);
+    syncFmtCell(cell);
+  });
+  Export.syncMdOption();
+}
+
 function initFmtGrid() {
   document.querySelectorAll('.fmt-cell').forEach(cell => {
     syncFmtCell(cell);
     cell.querySelector('.fmt-input')?.addEventListener('change', () => {
       syncFmtCell(cell);
+      Export.syncMdOption();
       Export.updateSummary();
       Export.renderNameChips();
       window.pywebview?.api?.save_settings({ lastFormats: Export._selectedFormats() });
@@ -722,11 +732,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (settings.lastPath)   document.getElementById('path-input').value  = settings.lastPath;
       if (settings.lastOutput) document.getElementById('out-input').value   = settings.lastOutput;
       if (settings.lastFormats) {
-        document.querySelectorAll('.fmt-cell').forEach(cell => {
-          const input = cell.querySelector('.fmt-input');
-          if (input) input.checked = (settings.lastFormats || []).includes(cell.dataset.fmt);
-          syncFmtCell(cell);
-        });
+        applyFormats(settings.lastFormats);
         Export.renderNameChips();
       }
     }

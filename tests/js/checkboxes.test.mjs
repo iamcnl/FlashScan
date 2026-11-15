@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { withApp } from "./helpers.mjs";
 
@@ -178,4 +181,53 @@ test("extension filter: groups open from a keyboard-operable button and custom e
     remove.click();
     assert.equal($(app, '[data-ext="xyz"]'), null);
   });
+});
+
+test("the Markdown style option is shown only while Markdown is selected", async () => {
+  await booted((app) => {
+    const row = $(app, "#adv-md-toggles");
+    const tile = (fmt) => $(app, `.fmt-cell[data-fmt="${fmt}"] .fmt-input`);
+    assert.equal(row.hidden, false);
+
+    tile("MD").click();
+    assert.equal(row.hidden, true);
+
+    tile("HTML").click();
+    assert.equal(row.hidden, true);
+
+    tile("MD").click();
+    assert.equal(row.hidden, false);
+  });
+});
+
+test("restoring saved formats updates the Markdown style option", async () => {
+  await booted((app) => {
+    const row = $(app, "#adv-md-toggles");
+
+    app.evaluate("applyFormats(['HTML', 'JSON']);");
+    assert.deepEqual(formats(app), ["HTML", "JSON"]);
+    assert.equal(row.hidden, true);
+
+    app.evaluate("applyFormats(['MD', 'TXT']);");
+    assert.deepEqual(formats(app), ["MD", "TXT"]);
+    assert.equal(row.hidden, false);
+  });
+});
+
+test("the Markdown style choice is kept while its option is hidden", async () => {
+  await booted((app) => {
+    $(app, "#chk-md-toggles").click();
+    $(app, '.fmt-cell[data-fmt="MD"] .fmt-input').click();
+
+    assert.equal($(app, "#adv-md-toggles").hidden, true);
+    assert.equal(app.evaluate("return Export._advOptions().md_toggles;"), false);
+  });
+});
+
+test("a hidden option row is not displayed even though its class sets a display value", () => {
+  const css = readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ui/css/components.css"),
+    "utf8",
+  );
+  assert.match(css, /\.adv-export-check\[hidden\] \{ display: none; \}/);
 });
