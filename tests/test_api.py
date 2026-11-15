@@ -983,9 +983,28 @@ def test_export_forwards_the_options_to_the_writer(app, window, drive, out, monk
 
     assert seen["include_size"] is False
     assert seen["include_date"] is False
+    assert seen["md_toggles"] is True
     assert seen["date_pattern"] == "%Y-%m-%d"
     assert seen["folder_notes"] == {"n": "note"}
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", seen["meta"]["timestamp"])
+
+
+def test_export_sends_md_toggles_to_the_markdown_writer_only(app, window, drive, out, monkeypatch):
+    seen = {}
+
+    def recorder(fmt):
+        def writer(handle, items, meta, **kwargs):
+            seen[fmt] = kwargs
+            handle.write("x")
+        return writer
+
+    monkeypatch.setitem(exporter.WRITERS, "MD", recorder("MD"))
+    monkeypatch.setitem(exporter.WRITERS, "TXT", recorder("TXT"))
+    scan = run_scan(app, window, drive)
+    run_export(app, window, scan["scan_id"], out, ["MD", "TXT"], md_toggles=False)
+
+    assert seen["MD"]["md_toggles"] is False
+    assert "md_toggles" not in seen["TXT"]
 
 
 def test_export_falls_back_to_the_default_date_layout_for_a_bad_pattern(

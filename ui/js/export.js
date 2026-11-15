@@ -13,6 +13,7 @@ const Export = {
   _optionKeys: {
     'chk-include-size': 'exportIncludeSize',
     'chk-include-date': 'exportIncludeDate',
+    'chk-md-toggles':   'exportMdToggles',
   },
 
   init() {
@@ -72,6 +73,7 @@ const Export = {
     return {
       include_size: document.getElementById('chk-include-size')?.checked !== false,
       include_date: document.getElementById('chk-include-date')?.checked !== false,
+      md_toggles:   document.getElementById('chk-md-toggles')?.checked !== false,
     };
   },
 
@@ -218,6 +220,7 @@ const Export = {
         selection:    State.selectionDelta(),
         include_size: adv.include_size,
         include_date: adv.include_date,
+        md_toggles:   adv.md_toggles,
         date_pattern: DateFmt.pattern(),
         custom_names: this._customNames(),
       });
@@ -329,5 +332,3 @@ const Export = {
 
 function onExportProgress(done, total, fmt) { Export.onProgress(done, total, fmt); }
 function onExportDone(result) { Export.onDone(result); }
-
-/** fmtSize available globally (defined in tree.js, loaded earlier) */

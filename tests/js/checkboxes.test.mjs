@@ -68,11 +68,20 @@ test("export options: they restore from settings, save on change and feed the ex
     assert.deepEqual(JSON.parse(app.evaluate("return JSON.stringify(Export._advOptions());")), {
       include_size: false,
       include_date: true,
+      md_toggles: true,
     });
 
     $(app, "#chk-include-date").click();
     assert.deepEqual(saved(app), [{ exportIncludeDate: false }]);
     assert.equal(app.evaluate("return Export._advOptions().include_date;"), false);
+
+    app.evaluate("Export.applyOptions({ exportMdToggles: false });");
+    assert.equal($(app, "#chk-md-toggles").checked, false);
+    assert.equal(app.evaluate("return Export._advOptions().md_toggles;"), false);
+
+    $(app, "#chk-md-toggles").click();
+    assert.deepEqual(saved(app).at(-1), { exportMdToggles: true });
+    assert.equal(app.evaluate("return Export._advOptions().md_toggles;"), true);
   });
 });
 

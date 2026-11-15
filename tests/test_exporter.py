@@ -395,58 +395,147 @@ def test_a_partial_folder_chain_exports_a_re_ticked_file_under_a_drive_root():
 
 # ── Markdown ─────────────────────────────────────────────────────
 
+def assert_valid_nesting(md):
+    previous = None
+    for line in md.split("\n"):
+        item = re.match(r"^( *)- ", line)
+        if item is None:
+            assert not line.startswith(" "), line
+            previous = None
+            continue
+        indent = len(item.group(1))
+        assert indent % 4 == 0, line
+        assert indent <= (0 if previous is None else previous + 4), line
+        previous = indent
+
+
 def test_markdown_golden_output():
-    out = render(exporter.write_md, GOLDEN_ITEMS, folder_notes=GOLDEN_NOTES)
+    out = render(exporter.write_md_list, GOLDEN_ITEMS, folder_notes=GOLDEN_NOTES)
 
     assert out == "\n".join([
         "# MY USB (E:) — file list",
         "",
-        "**Date:** 2024-03-05 12:00  ",
-        "**Path:** `E:\\`  ",
-        "**Files:** 2 · **Total:** 2.0 KB",
+        "- **Exported:** 2024-03-05 12:00",
+        "- **Path:** `E:\\`",
+        "- **Contents:** 2 files · 3 folders · 2.0 KB",
         "",
         "---",
         "",
+        f"- z.txt · 10 B · {DATE}",
         "",
-        "## drive",
+        "## a",
         "",
-        f"    - z.txt · 10 B · {DATE}",
+        "> holiday pics",
         "",
-        "### a (holiday pics)",
+        "*1 file · 2.0 KB*",
         "",
-        f"        - one.txt · 2.0 KB · {DATE}",
-        "        - **deep/ *(contents omitted)***",
+        f"- one.txt · 2.0 KB · {DATE}",
+        "- **deep/** · names only",
+        "",
     ])
 
 
 def test_markdown_title_without_a_volume_label():
-    out = render(exporter.write_md, [], {**META, "volume_label": ""})
+    out = render(exporter.write_md_list, [], {**META, "volume_label": ""})
 
     assert out.startswith("# E: — file list")
 
 
+def test_markdown_output_ends_with_exactly_one_newline():
+    for items in ([], GOLDEN_ITEMS, [row(0, "folder", "drive", "", 0), row(1, "folder", "e", "e", 0)]):
+        out = render(exporter.write_md_list, items)
+
+        assert out.endswith("\n") and not out.endswith("\n\n")
+
+
+def test_folder_totals_follow_the_tree_levels_not_the_item_order():
+    tree = make_tree("a/", "a/b/", "a/b/c/", "a/b/c/x.bin", "a/b/y.bin", "a/z.bin", "top.bin")
+    counts, sizes = exporter._folder_totals(export(tree))
+
+    assert counts[path_of("a/b/c")] == 1
+    assert counts[path_of("a/b")] == 2
+    assert counts[path_of("a")] == 3
+    assert sizes[path_of("a")] == 30
+    assert counts[ROOT] == 4
+
+
+def test_markdown_lists_never_become_code_blocks():
+    tree = make_tree("a/", "a/b/", "a/b/c/", "a/b/c/x.bin", "a/b/y.bin", "a/z.bin", "top.bin", "top2.bin")
+    out = render(exporter.write_md_list, export(tree))
+
+    assert_valid_nesting(out)
+    assert "\n    - x.bin" not in out
+    assert "    - **c/** · 1 file · 10 B\n        - x.bin" in out
+
+
+def test_markdown_has_no_heading_for_the_root_and_lists_root_files_first():
+    tree = make_tree("top.bin", "a/", "a/x.bin")
+    out = render(exporter.write_md_list, export(tree))
+
+    assert "## drive" not in out
+    assert out.index("- top.bin") < out.index("## a")
+    assert "---\n\n- top.bin" in out
+
+
+def test_markdown_header_is_a_list_with_singular_counts():
+    meta = {**META, "file_count": 1, "folder_count": 1, "name_only_count": 2}
+    out = render(exporter.write_md_list, [], meta)
+
+    assert "- **Exported:** 2024-03-05 12:00\n- **Path:** `E:\\`\n" in out
+    assert "- **Contents:** 1 file · 1 folder · 2.0 KB · 2 names only\n" in out
+    assert "  \n" not in out
+
+
+def test_markdown_folder_heading_shows_note_count_and_size():
+    tree = make_tree("a/", "a/x.bin", "a/y.bin")
+    items = export(tree)
+    out = render(exporter.write_md_list, items, folder_notes={path_of("a"): "hello"})
+
+    assert "## a\n\n> hello\n\n*2 files · 20 B*\n\n" in out
+    bare = render(exporter.write_md_list, items, include_size=False)
+    assert "*2 files*" in bare and "20 B" not in bare
+
+
+def test_markdown_folder_size_counts_only_exported_files():
+    tree = make_tree("a/", "a/x.bin", "a/y.bin")
+    items = export(tree, files={path_of("a/x.bin")})
+
+    assert "*1 file · 10 B*" in render(exporter.write_md_list, items)
+
+
+def test_markdown_marks_names_only_and_empty_folders():
+    tree = make_tree("n/", "n/z.bin", "e/", "t/", "t/e2/")
+    items = export(tree, states={path_of("n"): "name"})
+    out = render(exporter.write_md_list, items)
+
+    assert "## n\n\n*names only · 10 B*\n" in out
+    assert "## e\n\n*empty*\n" in out
+    assert "- **e2/** · empty" in out
+    assert "*names only*\n" in render(exporter.write_md_list, items, include_size=False)
+
+
 def test_markdown_deeper_folder_with_a_note_is_a_bullet():
     items = [row(0, "folder", "drive", "", 0), row(2, "folder", "b", "a/b", 0)]
-    out = render(exporter.write_md, items, folder_notes={path_of("a/b"): "n"})
+    out = render(exporter.write_md_list, items, folder_notes={path_of("a/b"): "n"})
 
-    assert out.endswith("\n        - **b/** (n)")
+    assert out.endswith("- **b/** · empty — *n*\n")
 
 
-def test_markdown_omits_size_and_date_when_asked_or_empty():
+def test_markdown_omits_date_when_empty_and_sizes_when_asked():
     items = [
         row(0, "folder", "drive", "", 0),
         row(1, "file", "full.txt", "full.txt", 10),
         row(1, "file", "empty.txt", "empty.txt", 0),
         row(1, "file", "undated.txt", "undated.txt", 10, mtime=0),
     ]
-    out = render(exporter.write_md, items)
+    out = render(exporter.write_md_list, items)
 
-    assert f"    - full.txt · 10 B · {DATE}" in out
-    assert f"    - empty.txt · {DATE}" in out
-    assert "    - undated.txt · 10 B" in out and "undated.txt · 10 B ·" not in out
+    assert f"- full.txt · 10 B · {DATE}\n" in out
+    assert f"- empty.txt · 0 B · {DATE}\n" in out
+    assert "- undated.txt · 10 B\n" in out
 
-    bare = render(exporter.write_md, items, include_size=False, include_date=False)
-    assert "    - full.txt" in bare
+    bare = render(exporter.write_md_list, items, include_size=False, include_date=False)
+    assert "\n- full.txt\n" in bare
     assert " B" not in bare.split("---")[1]
     assert DATE not in bare
 
@@ -454,7 +543,7 @@ def test_markdown_omits_size_and_date_when_asked_or_empty():
 def test_markdown_escapes_special_characters_in_file_names():
     items = [row(0, "folder", "drive", "", 0), row(1, "file", "*star* #hash `tick`.txt", "x", 1)]
 
-    assert "    - \\*star\\* \\#hash \\`tick\\`.txt" in render(exporter.write_md, items)
+    assert "- \\*star\\* \\#hash \\`tick\\`.txt" in render(exporter.write_md_list, items)
 
 
 @pytest.mark.parametrize("name, escaped", [
@@ -470,13 +559,13 @@ def test_markdown_escapes_special_characters_in_file_names():
 def test_markdown_escapes_each_kind_of_markup(name, escaped):
     items = [row(0, "folder", "drive", "", 0), row(1, "file", name, "x", 1)]
 
-    assert f"    - {escaped} · 1 B" in render(exporter.write_md, items)
+    assert f"\n- {escaped} · 1 B" in render(exporter.write_md_list, items)
 
 
 def test_markdown_leaves_plain_names_untouched():
     items = [row(0, "folder", "drive", "", 0), row(1, "file", "Report (final) v2.0 - copy.txt", "x", 1)]
 
-    assert "    - Report (final) v2.0 - copy.txt" in render(exporter.write_md, items)
+    assert "- Report (final) v2.0 - copy.txt" in render(exporter.write_md_list, items)
 
 
 def test_markdown_escapes_folder_names_in_headings_and_bold_bullets():
@@ -485,27 +574,176 @@ def test_markdown_escapes_folder_names_in_headings_and_bold_bullets():
         row(1, "folder", "a*b", "a", 0),
         row(2, "folder", "c**d", "a/c", 0),
     ]
-    out = render(exporter.write_md, items)
+    out = render(exporter.write_md_list, items)
 
-    assert "### a\\*b" in out
-    assert "        - **c\\*\\*d/**" in out
+    assert "## a\\*b" in out
+    assert "- **c\\*\\*d/** · empty" in out
 
 
 def test_markdown_escapes_folder_notes():
     items = [row(0, "folder", "drive", "", 0), row(1, "folder", "a", "a", 0), row(2, "folder", "b", "a/b", 0)]
     notes = {path_of("a"): "see [this](http://x) *now*", path_of("a/b"): "# not a heading"}
-    out = render(exporter.write_md, items, folder_notes=notes)
+    out = render(exporter.write_md_list, items, folder_notes=notes)
 
-    assert "### a (see \\[this\\](http://x) \\*now\\*)" in out
-    assert "- **b/** (\\# not a heading)" in out
+    assert "> see \\[this\\](http://x) \\*now\\*" in out
+    assert "- **b/** · empty — *\\# not a heading*" in out
 
 
 def test_markdown_escapes_title_and_keeps_path_in_a_code_span():
     meta = {**META, "volume_label": "My_USB *1*", "path": "/mnt/odd`name"}
-    out = render(exporter.write_md, [], meta)
+    out = render(exporter.write_md_list, [], meta)
 
     assert out.startswith("# My\\_USB \\*1\\* (E:) — file list")
-    assert "**Path:** ``/mnt/odd`name``  " in out
+    assert "- **Path:** ``/mnt/odd`name``\n" in out
+
+
+# ── Markdown: toggles and tables ─────────────────────────────────
+
+def test_markdown_toggles_golden_output():
+    out = render(exporter.write_md_toggles, GOLDEN_ITEMS, folder_notes=GOLDEN_NOTES)
+
+    assert out == "\n".join([
+        "# MY USB (E:) — file list",
+        "",
+        "- **Exported:** 2024-03-05 12:00",
+        "- **Path:** `E:\\`",
+        "- **Contents:** 2 files · 3 folders · 2.0 KB",
+        "",
+        "---",
+        "",
+        "| Name | Size | Modified |",
+        "|---|--:|---|",
+        f"| z.txt | 10 B | {DATE} |",
+        "",
+        "<details open>",
+        "<summary><b>a/</b> · 1 file · 2.0 KB</summary>",
+        "",
+        "> holiday pics",
+        "",
+        "| Name | Size | Modified |",
+        "|---|--:|---|",
+        f"| one.txt | 2.0 KB | {DATE} |",
+        "",
+        "**deep/** · names only",
+        "",
+        "</details>",
+        "",
+    ])
+
+
+def test_markdown_defaults_to_toggles_and_can_switch_to_the_list():
+    assert exporter.WRITERS["MD"] is exporter.write_md
+    items = export(make_tree("a/", "a/x.bin"))
+
+    assert render(exporter.write_md, items) == render(exporter.write_md_toggles, items)
+    assert render(exporter.write_md, items, md_toggles=False) == render(exporter.write_md_list, items)
+    assert "| Name | Modified |" in render(exporter.write_md, items, include_size=False)
+    assert "- x.bin · 10 B" in render(exporter.write_md, items, md_toggles=False)
+
+
+def test_markdown_toggles_are_balanced_and_only_top_level_ones_start_open():
+    tree = make_tree("a/", "a/b/", "a/b/x.bin", "c/", "c/y.bin")
+    out = render(exporter.write_md_toggles, export(tree))
+
+    assert out.count("<details") == out.count("</details>") == 3
+    assert out.count("<details open>") == 2
+    assert out.index("<details open>\n<summary><b>a/</b>") < out.index("<details>\n<summary><b>b/</b>")
+
+
+def test_markdown_toggles_never_indent_lines():
+    tree = make_tree("a/", "a/b/", "a/b/c/", "a/b/c/x.bin", "a/b/y.bin", "top.bin")
+    out = render(exporter.write_md_toggles, export(tree))
+
+    assert not [line for line in out.split("\n") if line.startswith(" ")]
+
+
+def test_markdown_toggles_put_each_folders_files_in_its_own_table():
+    tree = make_tree("top.bin", "a/", "a/x.bin", "a/b/", "a/b/y.bin")
+    out = render(exporter.write_md_toggles, export(tree))
+
+    assert out.count("| Name | Size | Modified |") == 3
+    assert out.index("| top.bin") < out.index("<summary><b>a/</b>") < out.index("| x.bin") < out.index("<summary><b>b/</b>")
+    assert "| y.bin | 10 B |" in out
+
+
+def test_markdown_toggles_table_columns_follow_the_options():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "file", "full.txt", "full.txt", 10),
+        row(1, "file", "undated.txt", "undated.txt", 10, mtime=0),
+    ]
+    both = render(exporter.write_md_toggles, items)
+    assert f"| full.txt | 10 B | {DATE} |" in both
+    assert "| undated.txt | 10 B |  |" in both
+
+    no_size = render(exporter.write_md_toggles, items, include_size=False)
+    assert "| Name | Modified |\n|---|---|" in no_size
+    assert f"| full.txt | {DATE} |" in no_size
+
+    no_date = render(exporter.write_md_toggles, items, include_date=False)
+    assert "| Name | Size |\n|---|--:|" in no_date
+    assert "| full.txt | 10 B |\n" in no_date
+
+    neither = render(exporter.write_md_toggles, items, include_size=False, include_date=False)
+    assert "| Name |\n|---|" in neither
+    assert "| full.txt |\n" in neither
+
+
+def test_markdown_toggles_summary_and_cells_are_escaped_for_their_context():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "folder", "<b>&x", "a", 20),
+        row(2, "file", "a|b *c*.txt", "a/f", 20),
+    ]
+    out = render(exporter.write_md_toggles, items)
+
+    assert "<summary><b>&lt;b&gt;&amp;x/</b> · 1 file · 20 B</summary>" in out
+    assert "| a\\|b \\*c\\*.txt | 20 B |" in out
+
+
+def test_markdown_toggles_show_folders_without_contents_as_plain_lines():
+    tree = make_tree("a/", "a/x.bin", "a/n/", "e/")
+    items = export(tree, states={path_of("a/n"): "name"})
+    out = render(exporter.write_md_toggles, items, folder_notes={path_of("e"): "hi"})
+
+    assert f"| x.bin | 10 B | {DATE} |\n\n**n/** · names only\n\n</details>" in out
+    assert "**e/** · empty — *hi*\n" in out
+    assert out.count("<details") == 1
+
+
+def test_markdown_toggles_folder_size_counts_only_exported_files():
+    tree = make_tree("a/", "a/x.bin", "a/y.bin")
+    items = export(tree, files={path_of("a/x.bin")})
+
+    assert "<summary><b>a/</b> · 1 file · 10 B</summary>" in render(exporter.write_md_toggles, items)
+
+
+def test_markdown_toggles_close_open_toggles_before_a_file_that_follows_them():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "folder", "a", "a", 20),
+        row(2, "folder", "b", "a/b", 10),
+        row(3, "file", "y.bin", "a/b/y.bin", 10),
+        row(2, "file", "x.bin", "a/x.bin", 10),
+    ]
+    out = render(exporter.write_md_toggles, items)
+
+    assert out.index("| y.bin") < out.index("</details>") < out.index("| x.bin")
+    assert out.count("<details") == out.count("</details>") == 2
+
+
+def test_markdown_toggles_output_ends_with_exactly_one_newline():
+    for items in ([], GOLDEN_ITEMS, [row(0, "folder", "drive", "", 0), row(1, "folder", "e", "e", 0)]):
+        out = render(exporter.write_md_toggles, items)
+
+        assert out.endswith("\n") and not out.endswith("\n\n")
+
+
+def test_markdown_toggles_report_progress():
+    seen = []
+    render(exporter.write_md_toggles, GOLDEN_ITEMS, progress=seen.append)
+
+    assert seen[-1] == len(GOLDEN_ITEMS)
 
 
 # ── TXT ──────────────────────────────────────────────────────────
@@ -1034,7 +1272,7 @@ def test_txt_writer_keeps_unicode_and_punctuation_names():
 def test_markdown_writer_keeps_unicode_and_escapes_punctuation_names():
     names = ["naïve ☃ 日本語.txt", "a & b.txt", "it's #1 [x] {y}.txt", "say \"hi\".txt"]
     items = [row(0, "folder", "drive", "", 0)] + [row(1, "file", n, f"f{i}", 1) for i, n in enumerate(names)]
-    out = render(exporter.write_md, items)
+    out = render(exporter.write_md_list, items)
 
     assert "naïve ☃ 日本語.txt" in out
     assert "a \\& b.txt" in out
@@ -1061,7 +1299,7 @@ def test_scanned_drive_exports_to_every_format(tmp_path):
     notes = {str(drive / "keep"): "keep me"}
     items = list(exporter.iter_export(tree, states, {i["path"] for i in tree if i["type"] == "file"}))
 
-    md = render(exporter.write_md, items, folder_notes=notes)
+    md = render(exporter.write_md_list, items, folder_notes=notes)
     txt = render(exporter.write_txt, items, folder_notes=notes)
     data = json.loads(render(exporter.write_json, items, folder_notes=notes))
     _html, page = html_of(items, folder_notes=notes)

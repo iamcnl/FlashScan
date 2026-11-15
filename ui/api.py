@@ -502,6 +502,7 @@ class API:
 
         The scanned tree stays in Python (see scan()); the UI sends only the selection:
         params: { scan_id, formats, output_dir, custom_names, include_size, include_date,
+                  md_toggles (Markdown only: folders as toggles with file tables, default true; false = plain list),
                   date_pattern (strftime layout of %d %m %Y; invalid values fall back to the default),
                   selection: { all_except | only: [file paths],
                                folder_states: {path: state} (folders that are not "full"),
@@ -569,6 +570,7 @@ class API:
         formats      = params.get("formats", [])
         include_size = params.get("include_size", True)
         include_date = params.get("include_date", True)
+        md_toggles   = params.get("md_toggles", True)
         date_pattern = exporter.normalize_date_pattern(params.get("date_pattern"))
         custom_names = params.get("custom_names", {})
         folder_notes = selection.get("folder_notes", {})
@@ -611,7 +613,8 @@ class API:
                 tmp_file = out_file.with_name(out_file.name + ".part")
                 with open(tmp_file, "w", encoding="utf-8", errors="backslashreplace") as fh:
                     writer(fh, items, meta, include_size=include_size, include_date=include_date,
-                           date_pattern=date_pattern, folder_notes=folder_notes, progress=report)
+                           date_pattern=date_pattern, folder_notes=folder_notes, progress=report,
+                           **({"md_toggles": md_toggles} if fmt == "MD" else {}))
                 os.replace(tmp_file, out_file)
             except Exception as e:
                 log.exception("Export failed: format=%s target=%s", fmt, out_file or target)

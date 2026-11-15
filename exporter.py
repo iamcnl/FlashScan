@@ -95,6 +95,25 @@ def _md_code(s: str) -> str:
 PROGRESS_EVERY = 1000
 
 
+def _folder_totals(items: list) -> tuple[dict[str, int], dict[str, int]]:
+    """File counts and byte totals per folder path, counting only the exported files."""
+    counts: dict[str, int] = {}
+    sizes: dict[str, int] = {}
+    stack: list[tuple[int, str]] = []
+    for lvl, typ, _, fpath, fsize, *_ in items:
+        while stack and stack[-1][0] >= lvl:
+            stack.pop()
+        if typ == "folder":
+            counts[fpath] = 0
+            sizes[fpath] = 0
+            stack.append((lvl, fpath))
+        else:
+            for _, fp in stack:
+                counts[fp] += 1
+                sizes[fp] += fsize
+    return counts, sizes
+
+
 class _Lines:
     """Streams lines joined by "\n" with no trailing newline, like "\n".join(lines)."""
 
@@ -147,40 +166,187 @@ def iter_export(tree: list, folder_states: dict, selected_files: set,
 
 # ── Markdown ──────────────────────────────────────────────────────
 
-def write_md(out, items: list, meta, *, include_size=True, include_date=True,
-             date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
-    folder_notes = folder_notes or {}
+def _md_folder_info(state: str, files: int, shown_bytes: int, include_size: bool) -> str:
+    if state == "name":
+        parts = ["names only"]
+    else:
+        parts = [f"{files} {_noun(files, 'file')}"] if files else ["empty"]
+    if include_size and shown_bytes:
+        parts.append(fmt_size(shown_bytes))
+    return " · ".join(parts)
+
+
+def _md_header(meta) -> list[str]:
     label = meta.get('volume_label', '')
     title = _md_esc(f"{label} ({meta['disk_name']})" if label else meta['disk_name'])
+    files_n, folders_n = meta['file_count'], meta['folder_count']
+    contents = [f"{files_n} {_noun(files_n, 'file')}", f"{folders_n} {_noun(folders_n, 'folder')}", meta['total_size']]
+    if meta.get('name_only_count'):
+        contents.append(f"{meta['name_only_count']} names only")
+    return [
+        f"# {title} — file list",
+        "",
+        f"- **Exported:** {meta['timestamp']}",
+        f"- **Path:** {_md_code(meta['path'])}",
+        f"- **Contents:** {' · '.join(contents)}",
+        "",
+        "---",
+    ]
+
+
+def _md_file_parts(name: str, size: int, mtime: int, include_size: bool, include_date: bool, date_pattern: str) -> list[str]:
+    parts = [name]
+    if include_size:
+        parts.append(fmt_size(size))
+    date = fmt_date(mtime, date_pattern) if (include_date and mtime) else ""
+    if date:
+        parts.append(date)
+    return parts
+
+
+def write_md_list(out, items: list, meta, *, include_size=True, include_date=True,
+                  date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
+    folder_notes = folder_notes or {}
+    folder_files, folder_bytes = _folder_totals(items)
     emit = _Lines(out).add
-    for line in (
-        f"# {title} — file list\n",
-        f"**Date:** {meta['timestamp']}  ",
-        f"**Path:** {_md_code(meta['path'])}  ",
-        f"**Files:** {meta['file_count']} · **Total:** {meta['total_size']}\n",
-        "---\n",
-    ):
+    blank_pending = False
+
+    def put(line: str) -> None:
+        nonlocal blank_pending
+        if blank_pending:
+            emit("")
+            blank_pending = False
         emit(line)
+
+    def blank() -> None:
+        nonlocal blank_pending
+        blank_pending = True
+
+    for line in _md_header(meta):
+        emit(line)
+    blank()
+
     for n, (lvl, typ, name, fpath, size, mtime, state) in enumerate(items, 1):
-        indent = "    " * lvl
         name = _md_esc(name)
         if typ == "folder":
-            hdr    = "#" * min(lvl + 2, 6)
-            suffix = " *(contents omitted)*" if state == "name" else ""
-            note        = _md_esc(folder_notes.get(fpath, ""))
-            note_inline = f" ({note})" if note else ""
-            if lvl <= 1:
-                emit(f"\n{hdr} {name}{suffix}{note_inline}\n")
-            else:
-                emit(f"{indent}- **{name}/{suffix}**{note_inline}")
+            if lvl > 0:
+                note = _md_esc(folder_notes.get(fpath, ""))
+                shown_bytes = size if state == "name" else folder_bytes.get(fpath, 0)
+                info = _md_folder_info(state, folder_files.get(fpath, 0), shown_bytes, include_size)
+                if lvl == 1:
+                    blank()
+                    put(f"## {name}")
+                    blank()
+                    if note:
+                        put(f"> {note}")
+                        blank()
+                    put(f"*{info}*")
+                    blank()
+                else:
+                    tail = f" — *{note}*" if note else ""
+                    put(f"{'    ' * (lvl - 2)}- **{name}/** · {info}{tail}")
         else:
-            sz = f" · {fmt_size(size)}" if (include_size and size) else ""
-            dt = f" · {fmt_date(mtime, date_pattern)}" if (include_date and mtime) else ""
-            emit(f"{indent}- {name}{sz}{dt}")
+            parts = _md_file_parts(name, size, mtime, include_size, include_date, date_pattern)
+            put(f"{'    ' * max(lvl - 2, 0)}- {' · '.join(parts)}")
         if progress and n % PROGRESS_EVERY == 0:
             progress(n)
+    out.write("\n")
     if progress:
         progress(len(items))
+
+
+def _md_table_head(include_size: bool, include_date: bool) -> list[str]:
+    head, rule = ["Name"], ["---"]
+    if include_size:
+        head.append("Size")
+        rule.append("--:")
+    if include_date:
+        head.append("Modified")
+        rule.append("---")
+    return ["| " + " | ".join(head) + " |", "|" + "|".join(rule) + "|"]
+
+
+def write_md_toggles(out, items: list, meta, *, include_size=True, include_date=True,
+                     date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
+    folder_notes = folder_notes or {}
+    folder_files, folder_bytes = _folder_totals(items)
+    table_head = _md_table_head(include_size, include_date)
+    emit = _Lines(out).add
+    blank_pending = False
+    in_table = False
+    open_levels: list[int] = []
+
+    def put(line: str) -> None:
+        nonlocal blank_pending
+        if blank_pending:
+            emit("")
+            blank_pending = False
+        emit(line)
+
+    def blank() -> None:
+        nonlocal blank_pending
+        blank_pending = True
+
+    def close_toggles(from_level: int) -> None:
+        nonlocal in_table
+        in_table = False
+        while open_levels and open_levels[-1] >= from_level:
+            open_levels.pop()
+            blank()
+            put("</details>")
+            blank()
+
+    for line in _md_header(meta):
+        emit(line)
+    blank()
+
+    for n, (lvl, typ, name, fpath, size, mtime, state) in enumerate(items, 1):
+        if typ == "folder":
+            if lvl > 0:
+                close_toggles(lvl)
+                note = _md_esc(folder_notes.get(fpath, ""))
+                shown_bytes = size if state == "name" else folder_bytes.get(fpath, 0)
+                info = _md_folder_info(state, folder_files.get(fpath, 0), shown_bytes, include_size)
+                has_children = n < len(items) and items[n][0] > lvl
+                if state == "name" or not has_children:
+                    tail = f" — *{note}*" if note else ""
+                    blank()
+                    put(f"**{_md_esc(name)}/** · {info}{tail}")
+                    blank()
+                else:
+                    blank()
+                    put("<details open>" if lvl == 1 else "<details>")
+                    put(f"<summary><b>{_esc(name)}/</b> · {info}</summary>")
+                    blank()
+                    if note:
+                        put(f"> {note}")
+                        blank()
+                    open_levels.append(lvl)
+        else:
+            if open_levels and open_levels[-1] >= lvl:
+                close_toggles(lvl)
+            if not in_table:
+                blank()
+                for line in table_head:
+                    put(line)
+                in_table = True
+            cells = [_md_esc(name)]
+            if include_size:
+                cells.append(fmt_size(size))
+            if include_date:
+                cells.append(fmt_date(mtime, date_pattern) if mtime else "")
+            put("| " + " | ".join(cells) + " |")
+        if progress and n % PROGRESS_EVERY == 0:
+            progress(n)
+    close_toggles(0)
+    out.write("\n")
+    if progress:
+        progress(len(items))
+
+
+def write_md(out, items: list, meta, *, md_toggles=True, **options) -> None:
+    writer = write_md_toggles if md_toggles else write_md_list
+    writer(out, items, meta, **options)
 
 
 # ── TXT ──────────────────────────────────────────────────────────
@@ -327,19 +493,7 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
     def render_tree(items: list) -> None:
         open_levels: list[int] = []
 
-        # Pre-compute file counts for each folder (including subfolders)
-        folder_file_counts: dict[str, int] = {}
-        folder_bytes: dict[str, int] = {}
-        folder_stack: list[tuple[int, str]] = []
-        for lvl, typ, _, fpath, fsize, *_ in items:
-            if typ == "folder":
-                folder_stack = [(l, p) for l, p in folder_stack if l < lvl]
-                folder_file_counts[fpath] = 0
-                folder_stack.append((lvl, fpath))
-            elif typ == "file":
-                for _, fp in folder_stack:
-                    folder_file_counts[fp] = folder_file_counts.get(fp, 0) + 1
-                    folder_bytes[fp] = folder_bytes.get(fp, 0) + fsize
+        folder_file_counts, folder_bytes = _folder_totals(items)
 
         # Reorder: within each folder's children, folders before files
         def reorder(items: list) -> list:
