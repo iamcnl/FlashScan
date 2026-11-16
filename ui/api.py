@@ -439,6 +439,14 @@ class API:
                     "tree":         result["tree"],
                     "path":         path,
                     "volume_label": result.get("volume_label", ""),
+                    "scope": {
+                        "depth":          depth,
+                        "include_hidden": incl_hidden,
+                        "include_system": incl_system,
+                        "unreadable":     result["unreadable_count"],
+                        "beyond_depth":   result["beyond_depth"],
+                        "links_skipped":  result["links_skipped"],
+                    },
                 }
                 call = f"onScanDone({safe_text.dumps(result)})"
                 self._log_scan_result(scan_id, result, time.monotonic() - started)
@@ -576,7 +584,7 @@ class API:
         folder_notes = selection.get("folder_notes", {})
 
         items = list(self._export_items(scan, selection))
-        meta = self._build_meta(items, scan, date_pattern)
+        meta = self._build_meta(items, scan, date_pattern, selection)
 
         total       = len(items)
         valid       = [f for f in formats if f in exporter.WRITERS]
@@ -667,7 +675,29 @@ class API:
         all_files = {item["path"] for item in tree if item["type"] == "file"}
         return all_files.difference(selection.get("all_except", ()))
 
-    def _build_meta(self, items: list, scan: dict, date_pattern: str) -> dict:
+    def _build_scope(self, items: list, scan: dict, selection: dict) -> dict:
+        scanned = scan.get("scope", {})
+        tree = scan["tree"]
+        folder_paths = {item["path"] for item in tree if item["type"] == "folder"}
+        file_paths = {item["path"] for item in tree if item["type"] == "file"}
+        raw_exts = selection.get("hidden_exts")
+        return {
+            "depth":              scanned.get("depth"),
+            "include_hidden":     scanned.get("include_hidden", False),
+            "include_system":     scanned.get("include_system", False),
+            "excluded_folders":   sum(
+                1 for path, state in selection.get("folder_states", {}).items()
+                if state == "skip" and path in folder_paths
+            ),
+            "names_only_folders": sum(1 for item in items if item[6] == "name"),
+            "deselected_files":   len(file_paths - self._selected_files(tree, selection)),
+            "excluded_extensions": sorted({str(e).lower() for e in raw_exts}) if raw_exts else [],
+            "unreadable":         scanned.get("unreadable", 0),
+            "beyond_depth":       scanned.get("beyond_depth", 0),
+            "links_skipped":      scanned.get("links_skipped", 0),
+        }
+
+    def _build_meta(self, items: list, scan: dict, date_pattern: str, selection: dict | None = None) -> dict:
         import exporter  # lazy
         path = scan["path"]
         volume_label = scan["volume_label"]
@@ -702,4 +732,7 @@ class API:
             "total_size":       exporter.fmt_size(total),
             "name_only_count":  name_only,
             "generated_by":     "flashscan",
+            "app_version":      __version__,
+            "exported_at":      datetime.now().astimezone().isoformat(timespec="seconds"),
+            "scope":            self._build_scope(items, scan, selection or {}),
         }

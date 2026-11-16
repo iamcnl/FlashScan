@@ -895,19 +895,33 @@ def test_txt_reports_progress():
 
 # ── JSON ─────────────────────────────────────────────────────────
 
+ISO = datetime(2024, 3, 5, 12, 0).astimezone().isoformat(timespec="seconds")
+
+SCOPE = {
+    "depth": 4, "include_hidden": False, "include_system": True, "excluded_folders": 1,
+    "names_only_folders": 1, "deselected_files": 3, "excluded_extensions": ["tmp", "log"],
+    "unreadable": 2, "beyond_depth": 1, "links_skipped": 0,
+}
+
+
 def golden_json_object():
-    def file_entry(name, rel, size, size_fmt):
-        return {"name": name, "path": path_of(rel), "size": size, "size_fmt": size_fmt, "date": DATE}
+    def file_entry(name, rel, size):
+        return {"name": name, "path": path_of(rel), "size_bytes": size, "modified": ISO}
 
     return {
-        "meta": META,
+        "meta": {
+            "format_version": 1, "generated_by": "flashscan", "disk_name": "E:", "volume_label": "MY USB",
+            "path": "E:\\", "file_count": 2, "folder_count": 3, "total_size_bytes": 2058,
+        },
         "folders": [
-            {"name": "drive", "path": ROOT, "level": 0, "mode": "full",
-             "files": [file_entry("z.txt", "z.txt", 10, "10 B")]},
-            {"name": "a", "path": path_of("a"), "level": 1, "mode": "full",
-             "files": [file_entry("one.txt", "a/one.txt", 2048, "2.0 KB")],
-             "note": "holiday pics"},
-            {"name": "deep", "path": path_of("a/deep"), "level": 2, "mode": "name", "files": []},
+            {"name": "drive", "path": ROOT, "parent": None, "level": 0, "mode": "full",
+             "size_bytes": 2058, "file_count": 2, "modified": ISO,
+             "files": [file_entry("z.txt", "z.txt", 10)]},
+            {"name": "a", "path": path_of("a"), "parent": ROOT, "level": 1, "mode": "full",
+             "size_bytes": 2048, "file_count": 1, "modified": ISO, "note": "holiday pics",
+             "files": [file_entry("one.txt", "a/one.txt", 2048)]},
+            {"name": "deep", "path": path_of("a/deep"), "parent": path_of("a"), "level": 2, "mode": "names_only",
+             "size_bytes": 0, "modified": ISO, "files": []},
         ],
     }
 
@@ -916,21 +930,98 @@ def test_json_streams_exactly_what_json_dumps_would_write():
     out = render(exporter.write_json, GOLDEN_ITEMS, folder_notes=GOLDEN_NOTES)
 
     expected = golden_json_object()
-    assert out == json.dumps(expected, ensure_ascii=False, indent=2)
+    assert out == json.dumps(expected, ensure_ascii=False, indent=2) + "\n"
     assert json.loads(out) == expected
 
 
 def test_json_with_no_items_is_still_valid():
     out = render(exporter.write_json, [])
 
-    assert out == json.dumps({"meta": META, "folders": []}, ensure_ascii=False, indent=2)
+    assert json.loads(out)["folders"] == []
+    assert out.endswith("]\n}\n")
+
+
+def test_json_meta_carries_the_version_export_time_and_scope_when_given():
+    meta = {**META, "app_version": "1.2.3", "exported_at": "2024-03-05T12:00:00+01:00", "scope": SCOPE}
+    out = json.loads(render(exporter.write_json, GOLDEN_ITEMS, meta))["meta"]
+
+    assert out["format_version"] == 1
+    assert out["app_version"] == "1.2.3"
+    assert out["exported_at"] == "2024-03-05T12:00:00+01:00"
+    assert out["scope"] == SCOPE
+    assert list(out)[-2:] == ["total_size_bytes", "scope"]
+
+
+def test_json_meta_has_no_display_strings():
+    out = json.loads(render(exporter.write_json, GOLDEN_ITEMS))["meta"]
+
+    assert "timestamp" not in out and "total_size" not in out
+    assert out["total_size_bytes"] == 2058
+
+
+def test_json_dates_are_iso_8601_with_an_offset_and_skipped_when_unknown():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "file", "dated.txt", "dated.txt", 1),
+        row(1, "file", "undated.txt", "undated.txt", 1, mtime=0),
+    ]
+    files = json.loads(render(exporter.write_json, items))["folders"][0]["files"]
+
+    assert files[0]["modified"] == ISO
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", files[0]["modified"])
+    assert "modified" not in files[1]
+
+
+def test_json_ignores_the_display_date_pattern():
+    out = render(exporter.write_json, export(make_tree("a.txt")), date_pattern="%m/%d/%Y")
+
+    assert ISO in out and "03/05/2024" not in out
+
+
+def test_json_folders_know_their_parent():
+    tree = make_tree("a/", "a/b/", "a/b/x.bin", "c/")
+    folders = {f["name"]: f for f in json.loads(render(exporter.write_json, export(tree)))["folders"]}
+
+    assert folders["drive"]["parent"] is None
+    assert folders["a"]["parent"] == ROOT
+    assert folders["b"]["parent"] == path_of("a")
+    assert folders["c"]["parent"] == ROOT
+    assert [f["level"] for f in folders.values()] == [0, 1, 2, 1]
+
+
+def test_json_folder_totals_count_only_exported_files():
+    tree = make_tree("a/", "a/x.bin", "a/y.bin", "n/", "n/z.bin")
+    items = export(tree, states={path_of("n"): "name"}, files={path_of("a/x.bin"), path_of("n/z.bin")})
+    folders = {f["name"]: f for f in json.loads(render(exporter.write_json, items))["folders"]}
+
+    assert (folders["a"]["file_count"], folders["a"]["size_bytes"]) == (1, 10)
+    assert folders["n"]["mode"] == "names_only"
+    assert "file_count" not in folders["n"] and folders["n"]["size_bytes"] == 10
+    assert folders["drive"]["file_count"] == 1
+
+
+def test_json_attaches_files_by_level_whatever_the_item_order():
+    items = [
+        row(0, "folder", "drive", "", 0),
+        row(1, "folder", "a", "a", 20),
+        row(2, "folder", "b", "a/b", 10),
+        row(3, "file", "y.bin", "a/b/y.bin", 10),
+        row(2, "file", "x.bin", "a/x.bin", 10),
+    ]
+    folders = {f["name"]: f for f in json.loads(render(exporter.write_json, items))["folders"]}
+
+    assert [f["name"] for f in folders["b"]["files"]] == ["y.bin"]
+    assert [f["name"] for f in folders["a"]["files"]] == ["x.bin"]
+    assert folders["a"]["file_count"] == 2
 
 
 def test_json_omits_size_and_date_fields_when_asked():
     out = json.loads(render(exporter.write_json, GOLDEN_ITEMS, include_size=False, include_date=False))
-    file_entry = out["folders"][0]["files"][0]
+    folders = out["folders"]
 
-    assert file_entry == {"name": "z.txt", "path": path_of("z.txt")}
+    assert folders[0]["files"][0] == {"name": "z.txt", "path": path_of("z.txt")}
+    assert all("size_bytes" not in f and "modified" not in f for f in folders)
+    assert folders[1]["file_count"] == 1
 
 
 def test_json_keeps_unicode_readable_and_escapes_awkward_names():
@@ -942,6 +1033,36 @@ def test_json_keeps_unicode_readable_and_escapes_awkward_names():
 
     assert "naïve ☃ 日本語.txt" in out
     assert [f["name"] for f in json.loads(out)["folders"][0]["files"]] == awkward
+
+
+# ── Scope line ───────────────────────────────────────────────────
+
+@pytest.mark.parametrize("scope, expected", [
+    ({"depth": 4, "include_hidden": False, "include_system": False}, "depth 4 · hidden and system items excluded"),
+    ({"include_hidden": True, "include_system": True}, "hidden and system items included"),
+    ({"include_hidden": True, "include_system": False}, "hidden items included, system items excluded"),
+    ({"include_hidden": False, "include_system": True}, "hidden items excluded, system items included"),
+    (SCOPE, "depth 4 · hidden items excluded, system items included · 1 folder excluded · 1 folder names only"
+            " · 3 files deselected · 2 extensions excluded · 2 items unreadable"
+            " · 1 folder beyond the depth limit"),
+    ({"include_hidden": False, "include_system": False, "unreadable": 1, "links_skipped": 1},
+     "hidden and system items excluded · 1 item unreadable · 1 link skipped"),
+])
+def test_scope_text_lists_only_what_applies(scope, expected):
+    assert exporter._scope_text(scope) == expected
+
+
+def test_scope_line_appears_in_the_text_formats_only_when_given():
+    meta = {**META, "scope": {"depth": 3, "include_hidden": False, "include_system": False}}
+    text = "depth 3 · hidden and system items excluded"
+
+    assert f"- **Scope:** {text}\n" in render(exporter.write_md_list, GOLDEN_ITEMS, meta)
+    assert f"- **Scope:** {text}\n" in render(exporter.write_md_toggles, GOLDEN_ITEMS, meta)
+    assert f"  Scope: {text}\n" in render(exporter.write_txt, GOLDEN_ITEMS, meta)
+    _html, page = html_of(GOLDEN_ITEMS, meta)
+    assert page.texts("disk-date") == ["exported 2024-03-05 12:00", text]
+    for writer in (exporter.write_md_list, exporter.write_md_toggles, exporter.write_txt):
+        assert "Scope" not in render(writer, GOLDEN_ITEMS)
 
 
 # ── HTML ─────────────────────────────────────────────────────────
@@ -1363,8 +1484,8 @@ def test_every_writer_works_without_a_progress_callback(fmt):
     assert render(exporter.WRITERS[fmt], GOLDEN_ITEMS, progress=None)
 
 
-@pytest.mark.parametrize("fmt", sorted(exporter.WRITERS))
-def test_every_writer_formats_dates_with_the_given_pattern(fmt):
+@pytest.mark.parametrize("fmt", [fmt for fmt in sorted(exporter.WRITERS) if fmt != "JSON"])
+def test_every_display_writer_formats_dates_with_the_given_pattern(fmt):
     out = render(exporter.WRITERS[fmt], export(make_tree("a.txt")), date_pattern="%m/%d/%Y")
 
     assert "03/05/2024" in out

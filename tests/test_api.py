@@ -1007,6 +1007,25 @@ def test_export_sends_md_toggles_to_the_markdown_writer_only(app, window, drive,
     assert "md_toggles" not in seen["TXT"]
 
 
+def test_json_export_records_the_scan_scope_and_the_selection(app, window, drive, out):
+    scan = run_scan(app, window, drive, depth=3)
+    selection = {
+        "all_except": [str(drive / "a.txt")],
+        "folder_states": {str(drive / "photos"): "skip", str(drive / "docs"): "name"},
+        "hidden_exts": ["log"],
+    }
+    result = run_export(app, window, scan["scan_id"], out, ["JSON"], selection)
+    meta = json.loads(Path(result["saved"][0]).read_text(encoding="utf-8"))["meta"]
+
+    assert meta["app_version"] == api.__version__
+    assert meta["format_version"] == 1
+    assert meta["scope"] == {
+        "depth": 3, "include_hidden": False, "include_system": False,
+        "excluded_folders": 1, "names_only_folders": 1, "deselected_files": 1,
+        "excluded_extensions": ["log"], "unreadable": 0, "beyond_depth": 0, "links_skipped": 0,
+    }
+
+
 def test_export_falls_back_to_the_default_date_layout_for_a_bad_pattern(
     app, window, drive, out, monkeypatch
 ):
@@ -1203,9 +1222,9 @@ def test_selected_files_only_wins_over_everything_else():
     assert api.API._selected_files(TREE, selection) == {"/d/a.txt"}
 
 
-def build_meta(app, scan, states=None):
+def build_meta(app, scan, states=None, selection=None):
     items = list(exporter.iter_export(TREE, states or {}, {"/d/a.txt", "/d/sub/b.txt"}, None))
-    return app._build_meta(items, scan, "%d. %m. %Y")
+    return app._build_meta(items, {"tree": TREE, **scan}, "%d. %m. %Y", selection)
 
 
 def test_meta_counts_exported_items_only(app):
@@ -1216,6 +1235,33 @@ def test_meta_counts_exported_items_only(app):
     assert meta["name_only_count"] == 1
     assert meta["total_size"] == exporter.fmt_size(4)
     assert meta["generated_by"] == "flashscan"
+    assert meta["app_version"] == api.__version__
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", meta["exported_at"])
+
+
+def test_meta_scope_combines_the_scan_settings_with_the_selection(app):
+    scan = {
+        "path": "/d", "volume_label": "", "tree": TREE,
+        "scope": {"depth": 7, "include_hidden": True, "include_system": False,
+                  "unreadable": 2, "beyond_depth": 1, "links_skipped": 3},
+    }
+    selection = {"all_except": ["/d/a.txt"], "folder_states": {"/d/sub": "skip", "/nowhere": "skip"},
+                 "hidden_exts": ["TMP", "log"]}
+    scope = build_meta(app, scan, {"/d/sub": "skip"}, selection)["scope"]
+
+    assert scope == {
+        "depth": 7, "include_hidden": True, "include_system": False,
+        "excluded_folders": 1, "names_only_folders": 0, "deselected_files": 1,
+        "excluded_extensions": ["log", "tmp"], "unreadable": 2, "beyond_depth": 1, "links_skipped": 3,
+    }
+
+
+def test_meta_scope_defaults_when_the_scan_has_no_scope_record(app):
+    scope = build_meta(app, {"path": "/d", "volume_label": "", "tree": TREE})["scope"]
+
+    assert scope["depth"] is None
+    assert (scope["excluded_folders"], scope["deselected_files"], scope["unreadable"]) == (0, 0, 0)
+    assert scope["excluded_extensions"] == []
 
 
 @pytest.mark.parametrize("scan, expected", [

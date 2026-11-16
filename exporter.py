@@ -45,18 +45,33 @@ def normalize_date_pattern(pattern) -> str:
     return DEFAULT_DATE_PATTERN
 
 
-def fmt_date(ts: float, pattern: str = DEFAULT_DATE_PATTERN) -> str:
+def _moment(ts: float) -> datetime | None:
     if not ts:
-        return ""
+        return None
     try:
-        moment = datetime.fromtimestamp(ts)
+        return datetime.fromtimestamp(ts)
     except (ValueError, OverflowError, OSError):
         # Windows refuses dates before 1970, but a zero FILETIME (year 1601) is common; others are garbage
         try:
-            moment = datetime(1970, 1, 1) + timedelta(seconds=ts)
+            return datetime(1970, 1, 1) + timedelta(seconds=ts)
         except (ValueError, OverflowError):
-            return ""
-    return moment.strftime(pattern)
+            return None
+
+
+def fmt_date(ts: float, pattern: str = DEFAULT_DATE_PATTERN) -> str:
+    moment = _moment(ts)
+    return moment.strftime(pattern) if moment else ""
+
+
+def fmt_iso(ts: float) -> str:
+    moment = _moment(ts)
+    if moment is None:
+        return ""
+    try:
+        moment = moment.astimezone()
+    except (ValueError, OverflowError, OSError):
+        pass
+    return moment.isoformat(timespec="seconds")
 
 
 def _noun(n: int, word: str) -> str:
@@ -112,6 +127,46 @@ def _folder_totals(items: list) -> tuple[dict[str, int], dict[str, int]]:
                 counts[fp] += 1
                 sizes[fp] += fsize
     return counts, sizes
+
+
+def _folder_members(items: list) -> tuple[dict[str, str | None], dict[str, list[int]]]:
+    """Each folder's parent path and the indexes of the files directly inside it, found by tree level."""
+    parents: dict[str, str | None] = {}
+    members: dict[str, list[int]] = {}
+    stack: list[tuple[int, str]] = []
+    for i, (lvl, typ, _, fpath, *_) in enumerate(items):
+        while stack and stack[-1][0] >= lvl:
+            stack.pop()
+        if typ == "folder":
+            parents[fpath] = stack[-1][1] if stack else None
+            members[fpath] = []
+            stack.append((lvl, fpath))
+        elif stack:
+            members[stack[-1][1]].append(i)
+    return parents, members
+
+
+def _scope_text(scope: dict) -> str:
+    hidden, system = scope.get("include_hidden"), scope.get("include_system")
+    if hidden == system:
+        visibility = f"hidden and system items {'included' if hidden else 'excluded'}"
+    else:
+        visibility = (
+            f"hidden items {'included' if hidden else 'excluded'}, "
+            f"system items {'included' if system else 'excluded'}"
+        )
+    parts = ([f"depth {scope['depth']}"] if scope.get("depth") else []) + [visibility]
+    counts = [
+        (scope.get("excluded_folders", 0), "folder", "excluded"),
+        (scope.get("names_only_folders", 0), "folder", "names only"),
+        (scope.get("deselected_files", 0), "file", "deselected"),
+        (len(scope.get("excluded_extensions", ())), "extension", "excluded"),
+        (scope.get("unreadable", 0), "item", "unreadable"),
+        (scope.get("beyond_depth", 0), "folder", "beyond the depth limit"),
+        (scope.get("links_skipped", 0), "link", "skipped"),
+    ]
+    parts += [f"{n} {_noun(n, noun)} {what}" for n, noun, what in counts if n]
+    return " · ".join(parts)
 
 
 class _Lines:
@@ -183,15 +238,16 @@ def _md_header(meta) -> list[str]:
     contents = [f"{files_n} {_noun(files_n, 'file')}", f"{folders_n} {_noun(folders_n, 'folder')}", meta['total_size']]
     if meta.get('name_only_count'):
         contents.append(f"{meta['name_only_count']} names only")
-    return [
+    lines = [
         f"# {title} — file list",
         "",
         f"- **Exported:** {meta['timestamp']}",
         f"- **Path:** {_md_code(meta['path'])}",
         f"- **Contents:** {' · '.join(contents)}",
-        "",
-        "---",
     ]
+    if meta.get("scope"):
+        lines.append(f"- **Scope:** {_scope_text(meta['scope'])}")
+    return lines + ["", "---"]
 
 
 def _md_file_parts(name: str, size: int, mtime: int, include_size: bool, include_date: bool, date_pattern: str) -> list[str]:
@@ -385,13 +441,15 @@ def write_txt(out, items: list, meta, *, include_size=True, include_date=True,
     if meta.get('name_only_count'):
         contents.append(f"{meta['name_only_count']} names only")
     bar = "=" * 60
-    for line in (
+    header = [
         bar,
         f"  {title} — file list",
         f"  Exported {meta['timestamp']}  |  {meta['path']}",
         f"  {'  |  '.join(contents)}",
-        bar,
-    ):
+    ]
+    if meta.get("scope"):
+        header.append(f"  Scope: {_scope_text(meta['scope'])}")
+    for line in header + [bar]:
         emit(line)
     blank_pending = True
 
@@ -430,10 +488,30 @@ def write_txt(out, items: list, meta, *, include_size=True, include_date=True,
 
 # ── JSON ─────────────────────────────────────────────────────────
 
+def _json_meta(meta: dict, items: list) -> dict:
+    out = {"format_version": 1, "generated_by": meta.get("generated_by", "flashscan")}
+    for key in ("app_version", "exported_at"):
+        if key in meta:
+            out[key] = meta[key]
+    out.update(
+        disk_name=meta["disk_name"],
+        volume_label=meta.get("volume_label", ""),
+        path=meta["path"],
+        file_count=meta["file_count"],
+        folder_count=meta["folder_count"],
+        total_size_bytes=sum(item[4] for item in items if item[1] == "file"),
+    )
+    if "scope" in meta:
+        out["scope"] = meta["scope"]
+    return out
+
+
 def write_json(out, items: list, meta, *, include_size=True, include_date=True,
                date_pattern=DEFAULT_DATE_PATTERN, folder_notes=None, progress=None) -> None:
-    """Streams the same text as json.dumps({"meta": ..., "folders": [...]}, indent=2)."""
+    """Streams the same text as json.dumps({"meta": ..., "folders": [...]}, indent=2) plus a final newline."""
     folder_notes = folder_notes or {}
+    folder_files, folder_bytes = _folder_totals(items)
+    parents, members = _folder_members(items)
     wrote_folder = False
 
     def write_folder(entry: dict) -> None:
@@ -442,38 +520,52 @@ def write_json(out, items: list, meta, *, include_size=True, include_date=True,
         out.write(("," if wrote_folder else "") + "\n    " + text)
         wrote_folder = True
 
-    meta_text = json.dumps(meta, ensure_ascii=False, indent=2).replace("\n", "\n  ")
+    meta_text = json.dumps(_json_meta(meta, items), ensure_ascii=False, indent=2).replace("\n", "\n  ")
     out.write('{\n  "meta": ' + meta_text + ',\n  "folders": [')
 
-    entry: dict | None = None
-    for n, (lvl, typ, name, fpath, size, mtime, state) in enumerate(items, 1):
-        if typ == "folder":
-            if entry is not None:
-                write_folder(entry)
-            entry = {
-                "name":  name,
-                "path":  fpath,
-                "level": lvl,
-                "mode":  state,
-                "files": [],
-            }
-            note = folder_notes.get(fpath, "")
-            if note:
-                entry["note"] = note
-        elif typ == "file" and entry is not None:
-            file_entry: dict = {"name": name, "path": fpath}
-            if include_size:
-                file_entry["size"]     = size
-                file_entry["size_fmt"] = fmt_size(size)
-            if include_date:
-                file_entry["date"] = fmt_date(mtime, date_pattern)
-            entry["files"].append(file_entry)
-        if progress and n % PROGRESS_EVERY == 0:
-            progress(n)
+    done = 0
 
-    if entry is not None:
+    def tick() -> None:
+        nonlocal done
+        done += 1
+        if progress and done % PROGRESS_EVERY == 0:
+            progress(done)
+
+    for lvl, typ, name, fpath, size, mtime, state in items:
+        if typ != "folder":
+            continue
+        tick()
+        names_only = state == "name"
+        entry: dict = {
+            "name":   name,
+            "path":   fpath,
+            "parent": parents[fpath],
+            "level":  lvl,
+            "mode":   "names_only" if names_only else "full",
+        }
+        if include_size:
+            entry["size_bytes"] = size if names_only else folder_bytes.get(fpath, 0)
+        if not names_only:
+            entry["file_count"] = folder_files.get(fpath, 0)
+        if include_date and (modified := fmt_iso(mtime)):
+            entry["modified"] = modified
+        note = folder_notes.get(fpath, "")
+        if note:
+            entry["note"] = note
+        files = []
+        for index in members[fpath]:
+            _, _, file_name, file_path, file_size, file_mtime, _ = items[index]
+            file_entry: dict = {"name": file_name, "path": file_path}
+            if include_size:
+                file_entry["size_bytes"] = file_size
+            if include_date and (file_modified := fmt_iso(file_mtime)):
+                file_entry["modified"] = file_modified
+            files.append(file_entry)
+            tick()
+        entry["files"] = files
         write_folder(entry)
-    out.write("\n  ]\n}" if wrote_folder else "]\n}")
+
+    out.write("\n  ]\n}\n" if wrote_folder else "]\n}\n")
     if progress:
         progress(len(items))
 
@@ -669,6 +761,9 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
     e_path         = _esc(meta['path'])
     e_timestamp    = _esc(meta['timestamp'])
     e_total_size   = _esc(meta['total_size'])
+    scope_html     = (
+        f'\n      <div class="disk-date">{_esc(_scope_text(meta["scope"]))}</div>' if meta.get("scope") else ""
+    )
     files_word     = _noun(meta['file_count'], 'file')
     folders_word   = _noun(meta['folder_count'], 'folder')
 
@@ -692,7 +787,7 @@ def write_html(out, items: list, meta, *, include_size=True, include_date=True,
     <div class="hdr-l">
       <div class="disk-name">{e_display_name}</div>
       <div class="disk-path">{e_path}{f' — {e_display_sub}' if display_sub else ''}</div>
-      <div class="disk-date">exported {e_timestamp}</div>
+      <div class="disk-date">exported {e_timestamp}</div>{scope_html}
     </div>
     <div class="hdr-r">
       <div class="watermark">flashscan</div>
