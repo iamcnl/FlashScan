@@ -101,11 +101,11 @@
 }
 .note-btn.note-active {
   opacity: 1;
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 .note-btn:hover {
   opacity: 1 !important;
-  color: var(--accent);
+  color: var(--accent-fg);
   background: var(--accent-light);
 }
 .row-folder:hover .note-btn {
@@ -688,7 +688,7 @@
 .adv-cal-day.range-start.range-end { border-radius: var(--r-sm); }
 .adv-cal-day.today {
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 .adv-cal-day.today.range-start,
 .adv-cal-day.today.range-end,
@@ -855,7 +855,7 @@
 .ctx-checkmark {
   display: flex;
   align-items: center;
-  color: var(--accent);
+  color: var(--accent-fg);
   flex-shrink: 0;
 }
 

@@ -323,7 +323,7 @@ const Tree = {
     if (this._flatRows.length === 0) {
       this._container.removeAttribute('aria-activedescendant');
       this._rowsEl.innerHTML =
-        '<div style="padding:24px 16px;font-size:12px;color:#9a9d94;">No results</div>';
+        '<div style="padding:24px 16px;font-size:12px;color:var(--text3);">No results</div>';
       this.updateStats();
       return;
     }
