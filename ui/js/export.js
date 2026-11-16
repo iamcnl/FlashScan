@@ -46,7 +46,9 @@ const Export = {
   },
 
   _defaultStem(fmt) {
-    const ts       = new Date().toISOString().slice(0, 10);
+    const now      = new Date();
+    const pad      = n => String(n).padStart(2, '0');
+    const ts       = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
     const diskName = this._diskName();
     return `${ts}_${this._sanitizeStem(diskName)}_LIST`;
   },
