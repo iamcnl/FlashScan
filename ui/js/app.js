@@ -233,7 +233,7 @@ function modalDialog(title, id) {
   return dialog;
 }
 
-function showModal(dialog, initialFocus, onClosed) {
+function showModal(dialog, initialFocus, onClosed, onKeydown) {
   const backdrop = modalEl('div', 'modal-backdrop');
   backdrop.append(dialog);
   const previousFocus = document.activeElement;
@@ -249,12 +249,14 @@ function showModal(dialog, initialFocus, onClosed) {
   // Capture phase on window: the tree's shortcuts must not fire behind the dialog.
   const onKey = e => {
     e.stopPropagation();
+    onKeydown?.(e);
     if (e.key === 'Escape') {
       e.preventDefault();
       finish();
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const items = [...dialog.querySelectorAll('select, button, input')].filter(el => !el.closest('[hidden]'));
+      const items = [...dialog.querySelectorAll('select, button, input, [tabindex="0"]')]
+        .filter(el => !el.closest('[hidden]') && !el.disabled && el.tabIndex >= 0);
       const at    = Math.max(items.indexOf(document.activeElement), 0);
       items[(at + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
     }
@@ -305,14 +307,46 @@ const SettingsDialog = {
       refresh();
     };
 
-    const close   = modalEl('button', 'btn btn-secondary', 'Close');
-    close.type = 'button';
-    const actions = modalEl('div', 'modal-actions');
-    actions.append(close);
+    const general = this._panel('settings-panel-general', 'settings-tab-general');
+    general.append(theme.field, list.field, linkedRow, exported.field, preview);
+
+    const driveCount = modalEl('span', 'count', '');
+    const drives     = this._drivesPanel(n => { driveCount.textContent = n ? ` ${n}` : ''; });
+
+    const tabGeneral = this._tab('settings-tab-general', 'General', general);
+    const tabDrives  = this._tab('settings-tab-drives', 'Drive memory', drives);
+    tabDrives.append(driveCount);
+    const tabs   = [tabGeneral, tabDrives];
+    const panels = [general, drives];
+    const select = index => tabs.forEach((tab, i) => {
+      tab.setAttribute('aria-selected', String(i === index));
+      tab.tabIndex = i === index ? 0 : -1;
+      panels[i].hidden = i !== index;
+    });
+    select(0);
+    tabs.forEach((tab, i) => tab.addEventListener('click', () => select(i)));
+
+    const tabList = modalEl('div', 'modal-tabs');
+    tabList.setAttribute('role', 'tablist');
+    tabList.append(...tabs);
 
     const dialog = modalDialog('Settings', 'settings-title');
-    dialog.append(theme.field, list.field, linkedRow, exported.field, preview, actions);
-    const finish = showModal(dialog, theme.select, () => { this._open = false; });
+    const close  = modalEl('button', 'modal-close', '\u00D7');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Close');
+    const head = modalEl('div', 'modal-head');
+    head.append(dialog.querySelector('.modal-title'), close);
+    dialog.append(head, tabList, general, drives);
+
+    const onKeydown = e => {
+      const at = tabs.indexOf(document.activeElement);
+      if (at < 0 || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+      e.preventDefault();
+      const next = (at + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      select(next);
+      tabs[next].focus();
+    };
+    const finish = showModal(dialog, theme.select, () => { this._open = false; }, onKeydown);
 
     close.addEventListener('click', finish);
     theme.select.addEventListener('change', () => Theme.set(theme.select.value, true));
@@ -350,14 +384,160 @@ const SettingsDialog = {
     field.append(label, select);
     return { select, label, field };
   },
+
+  _panel(id, tabId) {
+    const panel = modalEl('div', 'modal-panel');
+    panel.id = id;
+    panel.setAttribute('role', 'tabpanel');
+    panel.setAttribute('aria-labelledby', tabId);
+    return panel;
+  },
+
+  _tab(id, text, panel) {
+    const tab = modalEl('button', 'modal-tab', text);
+    tab.type = 'button';
+    tab.id = id;
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-controls', panel.id);
+    return tab;
+  },
+
+  _drivesPanel(onCount) {
+    const panel = this._panel('settings-panel-drives', 'settings-tab-drives');
+    const intro = modalEl('p', 'modal-text', 'Notes, folder states and selections saved for each drive.');
+    const list  = modalEl('ul', 'drive-list');
+    list.tabIndex = 0;
+    list.setAttribute('aria-label', 'Remembered drives');
+    const empty = modalEl('p', 'modal-text', 'No drives remembered yet.');
+    const forgetAll = modalEl('button', 'btn btn-secondary', 'Forget all\u2026');
+    forgetAll.type = 'button';
+    const actions = modalEl('div', 'modal-actions');
+    actions.append(forgetAll);
+    panel.append(intro, list, empty, actions);
+
+    const show = items => {
+      list.replaceChildren(...items.map(item => this._driveRow(item, forget)));
+      list.hidden    = !items.length;
+      empty.hidden   = !!items.length;
+      actions.hidden = !items.length;
+      onCount(items.length);
+    };
+    const load = async () => {
+      let items = [];
+      try {
+        const result = await window.pywebview?.api?.get_profiles?.();
+        if (Array.isArray(result)) items = result;
+      } catch (e) {}
+      show(items);
+    };
+
+    const forget = async item => {
+      const name = this._driveName(item);
+      const isOpen = Persist.active && Persist.volumeId === item.volumeId;
+      const confirmed = await ConfirmDialog.show({
+        title: `Forget ${name}?`,
+        intro: 'Its saved notes, folder states and selections will be deleted.',
+        note: isOpen ? 'This is the drive you scanned now, so it is reset as well.' : '',
+        confirmLabel: 'Forget',
+      });
+      if (!confirmed) return;
+      try { await window.pywebview?.api?.delete_profile?.(item.volumeId); } catch (e) { console.error(e); }
+      this._resetOpenDrive(item.volumeId);
+      await load();
+    };
+
+    forgetAll.addEventListener('click', async () => {
+      const count = list.children.length;
+      const confirmed = await ConfirmDialog.show({
+        title: 'Forget all drives?',
+        intro: `The saved notes, folder states and selections for ${count === 1 ? 'this drive' : `all ${count} drives`} will be deleted.`,
+        note: Persist.active
+          ? 'The drive you scanned now is reset as well. Your settings are not affected.'
+          : 'Your settings are not affected.',
+        confirmLabel: 'Forget all',
+      });
+      if (!confirmed) return;
+      try { await window.pywebview?.api?.clear_profiles?.(); } catch (e) { console.error(e); }
+      this._resetOpenDrive(null);
+      await load();
+    });
+
+    panel.hidden = true;
+    load();
+    return panel;
+  },
+
+  // Otherwise the open drive's state would be written back on the next change.
+  _resetOpenDrive(volumeId) {
+    if (!Persist.active || (volumeId && Persist.volumeId !== volumeId)) return;
+    Persist.reset();
+    ProfileNote.hide();
+    Tree.invalidate();
+    Tree.render();
+  },
+
+  _driveRow(item, onForget) {
+    const name = this._driveName(item);
+    const text = modalEl('div', 'drive-text');
+    text.append(modalEl('span', 'drive-name', name), modalEl('span', 'drive-meta', this._driveMeta(item)));
+    const button = modalEl('button', 'drive-forget');
+    button.type = 'button';
+    button.dataset.tip = 'Forget this drive';
+    button.setAttribute('aria-label', `Forget ${name}`);
+    button.append(binIcon());
+    button.addEventListener('click', () => onForget(item));
+    const row = modalEl('li', 'drive-item');
+    row.append(text, button);
+    return row;
+  },
+
+  _driveName({ label, volumeId }) {
+    if (label) return label;
+    return volumeId.startsWith('serial:') ? `Unnamed drive (ID ${volumeId.slice(7)})` : volumeId;
+  },
+
+  _driveMeta(item, now = Date.now()) {
+    const part = (n, one, many) => (n ? `${n} ${n === 1 ? one : many}` : '');
+    return [
+      part(item.notes, 'note', 'notes'),
+      part(item.folders, 'folder state', 'folder states'),
+      part(item.excluded, 'excluded file', 'excluded files'),
+      `scanned ${this._ago(item.used, now)}`,
+    ].filter(Boolean).join(' \u00B7 ');
+  },
+
+  _ago(seconds, now) {
+    const days = Math.floor((now / 1000 - seconds) / 86400);
+    if (days < 1) return 'today';
+    if (days === 1) return 'yesterday';
+    if (days < 14) return `${days} days ago`;
+    if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
+    return `${Math.floor(days / 30)} months ago`;
+  },
 };
 
+function svgNode(tag, attrs) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs).forEach(([name, value]) => node.setAttribute(name, value));
+  return node;
+}
+
+function binIcon() {
+  const svg = svgNode('svg', {
+    width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+    'stroke-width': 1.75, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true',
+  });
+  svg.append(
+    svgNode('polyline', { points: '3 6 5 6 21 6' }),
+    svgNode('path', { d: 'M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6' }),
+    svgNode('path', { d: 'M10 11v6M14 11v6' }),
+    svgNode('path', { d: 'M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2' }),
+  );
+  return svg;
+}
+
 function appIcon() {
-  const make = (tag, attrs) => {
-    const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
-    Object.entries(attrs).forEach(([name, value]) => node.setAttribute(name, value));
-    return node;
-  };
+  const make = svgNode;
   const svg = make('svg', { viewBox: '0 0 256 256', 'aria-hidden': 'true' });
   svg.append(
     make('rect', { width: 256, height: 256, rx: 58, fill: '#2d3b2e' }),

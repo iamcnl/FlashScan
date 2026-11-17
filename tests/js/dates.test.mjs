@@ -96,7 +96,7 @@ test("settings dialog closes with the button, Escape and a click outside", async
     const isOpen = () => app.document.getElementById("settings-date-format") !== null;
 
     openSettings(app);
-    app.document.querySelector(".modal .btn").click();
+    app.document.querySelector(".modal-close").click();
     assert.equal(isOpen(), false);
 
     openSettings(app);
@@ -233,7 +233,7 @@ test("Tab skips the hidden export field and visits the checkbox", async () => {
 
     assert.deepEqual(
       visited,
-      ["settings-theme", "settings-date-format", "settings-date-linked", "btn btn-secondary"],
+      ["settings-theme", "settings-date-format", "settings-date-linked", "modal-close"],
     );
   });
 });

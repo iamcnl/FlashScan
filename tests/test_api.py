@@ -581,6 +581,7 @@ def test_cancel_scan_without_a_running_scan_does_nothing(app):
 
 def test_cancelling_a_scan_notifies_the_ui_and_frees_the_slot(app, window, drive, monkeypatch):
     started = threading.Event()
+    real_scan_path = scanner.scan_path
 
     def cancellable(path, depth, incl_hidden, incl_system, progress_cb, cancel):
         started.set()
@@ -596,7 +597,7 @@ def test_cancelling_a_scan_notifies_the_ui_and_frees_the_slot(app, window, drive
 
     assert app.cancel_scan() == {"ok": False}
     assert app._scan_data is None
-    monkeypatch.undo()
+    monkeypatch.setattr(scanner, "scan_path", real_scan_path)
     assert run_scan(app, window, drive)["scan_id"] == 2
 
 
@@ -1340,6 +1341,58 @@ def test_profiles_round_trip_through_the_api(app):
 
     app.delete_profile("vol-1")
     assert app.get_profile("vol-1") is None
+
+
+def test_profiles_are_listed_with_what_they_hold_newest_first(app):
+    assert app.get_profiles() == []
+
+    app.save_profile("vol-1", {
+        "volume": {"label": "Backup USB"},
+        "notes": {"a": "x", "b": "y"},
+        "folders": {"c": "skip"},
+        "deselected": ["d", "e", "f"],
+    })
+    app.save_profile("vol-2", {"notes": {"z": "q"}})
+    older = time.time() - 86400
+    os.utime(settings._profile_path("vol-1"), (older, older))
+
+    listed = app.get_profiles()
+
+    assert [p["volumeId"] for p in listed] == ["vol-2", "vol-1"]
+    assert listed[1]["label"] == "Backup USB"
+    assert (listed[1]["notes"], listed[1]["folders"], listed[1]["excluded"]) == (2, 1, 3)
+    assert listed[0]["label"] == ""
+    assert listed[1]["used"] == pytest.approx(older)
+
+
+def test_listing_profiles_skips_unreadable_and_foreign_files(app):
+    app.save_profile("vol-1", {"notes": {"a": "x"}})
+    folder = settings.PROFILES_DIR
+    (folder / "broken.json").write_text("{not json", encoding="utf-8")
+    (folder / "old.json").write_text('{"version": 0, "volumeId": "old"}', encoding="utf-8")
+    (folder / "list.json").write_text("[]", encoding="utf-8")
+    (folder / "noid.json").write_text('{"version": 1}', encoding="utf-8")
+
+    assert [p["volumeId"] for p in app.get_profiles()] == ["vol-1"]
+
+
+def test_profiles_can_be_cleared(app):
+    app.save_profile("vol-1", {"notes": {"/a": "x"}})
+    app.save_profile("vol-2", {"notes": {"/b": "y"}})
+
+    assert app.clear_profiles() == 2
+    assert app.get_profiles() == []
+    assert app.get_profile("vol-1") is None
+    assert app.clear_profiles() == 0
+
+
+def test_clearing_profiles_leaves_the_settings_alone(app):
+    app.save_settings({"theme": "dark"})
+    app.save_profile("vol-1", {"notes": {"/a": "x"}})
+
+    app.clear_profiles()
+
+    assert app.get_settings()["theme"] == "dark"
 
 
 def test_js_log_entries_reach_the_logger(app, monkeypatch):

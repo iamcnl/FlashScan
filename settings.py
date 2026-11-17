@@ -132,6 +132,54 @@ def delete_profile(volume_id: str) -> None:
         log.warning("Cannot delete profile %s: %s", path, e)
 
 
+def _size(value) -> int:
+    return len(value) if isinstance(value, (dict, list)) else 0
+
+
+def list_profiles() -> list[dict]:
+    items = []
+    try:
+        with _lock:
+            for path in PROFILES_DIR.glob("*.json"):
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    used = path.stat().st_mtime
+                except Exception as e:
+                    log.warning("Cannot read profile %s: %s", path, e)
+                    continue
+                if not isinstance(data, dict) or data.get("version") != PROFILE_VERSION:
+                    continue
+                volume_id = data.get("volumeId")
+                if not isinstance(volume_id, str) or not volume_id:
+                    continue
+                volume = data.get("volume") if isinstance(data.get("volume"), dict) else {}
+                label = volume.get("label")
+                items.append({
+                    "volumeId": volume_id,
+                    "label": label if isinstance(label, str) else "",
+                    "notes": _size(data.get("notes")),
+                    "folders": _size(data.get("folders")),
+                    "excluded": _size(data.get("deselected")),
+                    "used": used,
+                })
+    except Exception as e:
+        log.warning("Cannot list profiles in %s: %s", PROFILES_DIR, e)
+    items.sort(key=lambda item: item["used"], reverse=True)
+    return items
+
+
+def clear_profiles() -> int:
+    removed = 0
+    try:
+        with _lock:
+            for path in PROFILES_DIR.glob("*.json"):
+                path.unlink(missing_ok=True)
+                removed += 1
+    except Exception as e:
+        log.warning("Cannot clear profiles in %s: %s", PROFILES_DIR, e)
+    return removed
+
+
 def _evict_old_profiles() -> None:
     profiles = sorted(
         PROFILES_DIR.glob("*.json"),

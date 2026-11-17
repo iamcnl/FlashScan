@@ -220,6 +220,12 @@ class API:
     def delete_profile(self, volume_id: str) -> None:
         settings.delete_profile(volume_id)
 
+    def get_profiles(self) -> list:
+        return settings.list_profiles()
+
+    def clear_profiles(self) -> int:
+        return settings.clear_profiles()
+
     # ── Logging ───────────────────────────────────────────────────
 
     def log_js(self, level: str, message: str, source: str = "") -> None:

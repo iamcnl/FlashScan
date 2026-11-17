@@ -22,6 +22,7 @@ const Persist = {
   _depth:   NaN,    // depth of the current scan, needed to re-apply a snapshot on undo
 
   get active() { return this._ready; },
+  get volumeId() { return this._volume?.id || null; },
 
   relKey(path) {
     const root = this._volume?.root || '';
