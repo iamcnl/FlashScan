@@ -142,6 +142,123 @@ test("changing the format redraws the dates in the file list", async () => {
 });
 
 
+test("the export format follows the file list until it is set on its own", async () => {
+  await withApp(async (app) => {
+    app.evaluate(`DateFmt.setMode("dmy");`);
+    assert.equal(app.evaluate(`return DateFmt.exportPattern()`), "%d. %m. %Y");
+
+    app.evaluate(`DateFmt.setExportMode("iso");`);
+    assert.equal(app.evaluate(`return DateFmt.exportPattern()`), "%Y-%m-%d");
+    assert.equal(app.evaluate(`return DateFmt.pattern()`), "%d. %m. %Y");
+
+    app.evaluate(`DateFmt.setExportMode("same"); DateFmt.setMode("mdy");`);
+    assert.equal(app.evaluate(`return DateFmt.exportPattern()`), "%m/%d/%Y");
+  });
+});
+
+test("an unknown saved export format falls back to following the file list", async () => {
+  await withApp(async (app) => {
+    assert.equal(app.evaluate(`DateFmt.setExportMode("nonsense"); return DateFmt.exportMode`), "same");
+    assert.equal(app.evaluate(`DateFmt.setExportMode(undefined); return DateFmt.exportMode`), "same");
+    assert.equal(app.evaluate(`DateFmt.setExportMode("system"); return DateFmt.exportMode`), "system");
+  });
+});
+
+test("the export format is hidden while it follows the file list", async () => {
+  await withApp(async (app) => {
+    openSettings(app);
+    const linked = app.document.getElementById("settings-date-linked");
+    const field = app.document.getElementById("settings-export-date-format").closest(".modal-field");
+
+    assert.equal(linked.checked, true);
+    assert.equal(field.hidden, true);
+    assert.equal(app.document.querySelector("label[for=settings-date-format]").textContent, "Date format");
+  });
+});
+
+test("unticking the box keeps the current format for exports and lets it be changed alone", async () => {
+  await withApp(async (app) => {
+    const saved = [];
+    app.window.pywebview = { api: { save_settings: (data) => saved.push(data) } };
+    app.evaluate(`DateFmt.setMode("dmy");`);
+
+    openSettings(app);
+    const linked = app.document.getElementById("settings-date-linked");
+    const select = app.document.getElementById("settings-export-date-format");
+    const change = (el) => el.dispatchEvent(new app.window.Event("change"));
+
+    linked.checked = false;
+    change(linked);
+    assert.equal(select.value, "dmy");
+    assert.equal(select.closest(".modal-field").hidden, false);
+    assert.equal(app.document.querySelector("label[for=settings-date-format]").textContent, "File list");
+
+    select.value = "iso";
+    change(select);
+    assert.equal(app.evaluate(`return DateFmt.exportMode`), "iso");
+    assert.equal(app.evaluate(`return DateFmt.mode`), "dmy");
+    assert.match(app.document.querySelector(".modal-text").textContent, /Exports: \d{4}-\d{2}-\d{2}/);
+
+    linked.checked = true;
+    change(linked);
+    assert.equal(app.evaluate(`return DateFmt.exportMode`), "same");
+    assert.equal(
+      JSON.stringify(saved),
+      JSON.stringify([{ exportDateFormat: "dmy" }, { exportDateFormat: "iso" }, { exportDateFormat: "same" }]),
+    );
+  });
+});
+
+test("the dialog shows the export format as its own when one was saved", async () => {
+  await withApp(async (app) => {
+    app.evaluate(`DateFmt.setMode("dmy"); DateFmt.setExportMode("iso");`);
+    openSettings(app);
+
+    assert.equal(app.document.getElementById("settings-date-linked").checked, false);
+    assert.equal(app.document.getElementById("settings-export-date-format").value, "iso");
+  });
+});
+
+test("Tab skips the hidden export field and visits the checkbox", async () => {
+  await withApp(async (app) => {
+    openSettings(app);
+    const press = () => app.window.dispatchEvent(
+      new app.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+    );
+    const visited = [app.document.activeElement.id];
+    press();
+    visited.push(app.document.activeElement.id);
+    press();
+    visited.push(app.document.activeElement.className);
+
+    assert.deepEqual(visited, ["settings-date-format", "settings-date-linked", "btn btn-secondary"]);
+  });
+});
+
+test("an export is sent with the export format, not the file list format", async () => {
+  await withApp(async (app) => {
+    app.evaluate(
+      `State.reset(V.tree);
+       document.querySelectorAll('.fmt-cell').forEach(cell =>
+         cell.querySelector('.fmt-input').checked = cell.dataset.fmt === 'MD');
+       document.getElementById('out-input').value = '/out';
+       DateFmt.setMode('dmy');
+       DateFmt.setExportMode('iso');
+       window.sent = null;
+       window.pywebview.api = { export: async (params) => { window.sent = params; return { async: true }; } };`,
+      {
+        tree: [
+          { lvl: 0, type: "folder", name: "drive", path: "/d", size: 0, mtime: 0 },
+          { lvl: 1, type: "file", name: "a.txt", path: "/d/a.txt", size: 3, mtime: STAMP },
+        ],
+      },
+    );
+    await app.evaluate("return Export.doExport();");
+
+    assert.equal(app.window.sent.date_pattern, "%Y-%m-%d");
+  });
+});
+
 test("the custom range label follows the date format chosen in settings", async () => {
   await withApp(async (app) => {
     const hint = () => app.document.getElementById("adv-cal-hint").textContent;

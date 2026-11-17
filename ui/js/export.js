@@ -228,7 +228,7 @@ const Export = {
         include_size: adv.include_size,
         include_date: adv.include_date,
         md_toggles:   adv.md_toggles,
-        date_pattern: DateFmt.pattern(),
+        date_pattern: DateFmt.exportPattern(),
         custom_names: this._customNames(),
       });
 

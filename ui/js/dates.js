@@ -1,8 +1,9 @@
 /**
- * dates.js — the date format shared by the file list and the exports
+ * dates.js — the date formats of the file list and of the exports
  *
- * A format is a strftime layout of %d %m %Y. The UI renders it here and export()
- * sends the same layout to Python, so both always show the same dates.
+ * A format is a strftime layout of %d %m %Y. The UI renders the file list here and
+ * export() sends the export layout to Python. The export format follows the file
+ * list unless it is set on its own.
  */
 
 const DateFmt = {
@@ -15,14 +16,31 @@ const DateFmt = {
   FIXED: { dmy: '%d. %m. %Y', mdy: '%m/%d/%Y', iso: '%Y-%m-%d' },
 
   mode: 'system',
+  exportMode: 'same',
   _systemPattern: null,
+
+  exportOptions() {
+    return [{ value: 'same', label: 'Same as file list' }, ...this.OPTIONS];
+  },
 
   setMode(mode) {
     this.mode = this.OPTIONS.some(o => o.value === mode) ? mode : 'system';
   },
 
+  setExportMode(mode) {
+    this.exportMode = mode === 'same' || this.OPTIONS.some(o => o.value === mode) ? mode : 'same';
+  },
+
+  patternFor(mode) {
+    return this.FIXED[mode] ?? this.systemPattern();
+  },
+
   pattern() {
-    return this.FIXED[this.mode] ?? this.systemPattern();
+    return this.patternFor(this.mode);
+  },
+
+  exportPattern() {
+    return this.patternFor(this.exportMode === 'same' ? this.mode : this.exportMode);
   },
 
   systemPattern() {
@@ -49,9 +67,9 @@ const DateFmt = {
     }
   },
 
-  formatDate(date) {
+  formatDate(date, pattern = this.pattern()) {
     const pad = n => String(n).padStart(2, '0');
-    return this.pattern().replace(/%([dmY])/g, (_, d) =>
+    return pattern.replace(/%([dmY])/g, (_, d) =>
       d === 'd' ? pad(date.getDate())
       : d === 'm' ? pad(date.getMonth() + 1)
       : String(date.getFullYear()));

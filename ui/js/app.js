@@ -254,7 +254,7 @@ function showModal(dialog, initialFocus, onClosed) {
       finish();
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const items = [...dialog.querySelectorAll('select, button')];
+      const items = [...dialog.querySelectorAll('select, button, input')].filter(el => !el.closest('[hidden]'));
       const at    = Math.max(items.indexOf(document.activeElement), 0);
       items[(at + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
     }
@@ -271,24 +271,38 @@ const SettingsDialog = {
     if (this._open || ConfirmDialog._open) return;
     this._open = true;
 
-    const select = modalEl('select', 'adv-select');
-    select.id = 'settings-date-format';
-    DateFmt.OPTIONS.forEach(({ value, label }) => {
-      const option = modalEl('option', '', label);
-      option.value = value;
-      select.append(option);
-    });
-    select.value = DateFmt.mode;
-    const label = modalEl('label', '', 'Date format');
-    label.htmlFor = select.id;
-    const field = modalEl('div', 'modal-field');
-    field.append(label, select);
+    const list     = this._field('settings-date-format', 'Date format', DateFmt.OPTIONS, DateFmt.mode);
+    const exported = this._field(
+      'settings-export-date-format', 'Exports', DateFmt.OPTIONS,
+      DateFmt.exportMode === 'same' ? DateFmt.mode : DateFmt.exportMode,
+    );
+
+    const linked = modalEl('input', 'cb-input sr-only');
+    linked.type    = 'checkbox';
+    linked.id      = 'settings-date-linked';
+    linked.checked = DateFmt.exportMode === 'same';
+    const box = modalEl('span', 'cb');
+    box.setAttribute('aria-hidden', 'true');
+    const linkedRow = modalEl('label', 'cb-row modal-check');
+    linkedRow.append(linked, box, modalEl('span', '', 'Use for file list and exports'));
 
     const preview = modalEl('p', 'modal-text');
-    const showPreview = () => {
-      preview.textContent = `Example: ${DateFmt.formatDate(new Date())}. Used in the file list and in exported files.`;
+    const refresh = () => {
+      list.label.textContent = linked.checked ? 'Date format' : 'File list';
+      exported.field.hidden  = linked.checked;
+      const now   = new Date();
+      const shown = linked.checked
+        ? `Example: ${DateFmt.formatDate(now)}.`
+        : `File list: ${DateFmt.formatDate(now)}. Exports: ${DateFmt.formatDate(now, DateFmt.exportPattern())}.`;
+      preview.textContent = `${shown} JSON exports always use ISO 8601.`;
     };
-    showPreview();
+    refresh();
+
+    const saveExportMode = () => {
+      State.settings.exportDateFormat = DateFmt.exportMode;
+      window.pywebview?.api?.save_settings({ exportDateFormat: DateFmt.exportMode });
+      refresh();
+    };
 
     const close   = modalEl('button', 'btn btn-secondary', 'Close');
     close.type = 'button';
@@ -296,18 +310,43 @@ const SettingsDialog = {
     actions.append(close);
 
     const dialog = modalDialog('Settings', 'settings-title');
-    dialog.append(field, preview, actions);
-    const finish = showModal(dialog, select, () => { this._open = false; });
+    dialog.append(list.field, linkedRow, exported.field, preview, actions);
+    const finish = showModal(dialog, list.select, () => { this._open = false; });
 
     close.addEventListener('click', finish);
-    select.addEventListener('change', () => {
-      DateFmt.setMode(select.value);
+    list.select.addEventListener('change', () => {
+      DateFmt.setMode(list.select.value);
       State.settings.dateFormat = DateFmt.mode;
       window.pywebview?.api?.save_settings({ dateFormat: DateFmt.mode });
-      showPreview();
+      refresh();
       AdvFilter.refreshDateFormat();
       if (State.treeData?.length) Tree.render();
     });
+    linked.addEventListener('change', () => {
+      if (!linked.checked) exported.select.value = list.select.value;
+      DateFmt.setExportMode(linked.checked ? 'same' : exported.select.value);
+      saveExportMode();
+    });
+    exported.select.addEventListener('change', () => {
+      DateFmt.setExportMode(exported.select.value);
+      saveExportMode();
+    });
+  },
+
+  _field(id, text, options, value) {
+    const select = modalEl('select', 'adv-select');
+    select.id = id;
+    options.forEach(({ value: optionValue, label }) => {
+      const option = modalEl('option', '', label);
+      option.value = optionValue;
+      select.append(option);
+    });
+    select.value = value;
+    const label = modalEl('label', '', text);
+    label.htmlFor = id;
+    const field = modalEl('div', 'modal-field');
+    field.append(label, select);
+    return { select, label, field };
   },
 };
 
@@ -725,6 +764,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       State.settings = { ...State.settings, ...settings };
       Theme.set(settings.theme === 'dark' ? 'dark' : 'light');
       DateFmt.setMode(settings.dateFormat);
+      DateFmt.setExportMode(settings.exportDateFormat);
       setCheckbox('cb-hidden', settings.inclHidden);
       setCheckbox('cb-system', settings.inclSystem);
       Export.applyOptions(settings);

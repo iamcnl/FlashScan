@@ -35,6 +35,7 @@ DEFAULTS: dict = {
     "exportIncludeDate": True,
     "exportMdToggles": True,
     "dateFormat":  "system",
+    "exportDateFormat": "same",
     "theme":       "light",
     "sortCol":     "name",
     "sortDir":     "asc",
