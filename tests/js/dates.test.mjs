@@ -226,12 +226,15 @@ test("Tab skips the hidden export field and visits the checkbox", async () => {
       new app.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
     );
     const visited = [app.document.activeElement.id];
-    press();
-    visited.push(app.document.activeElement.id);
-    press();
-    visited.push(app.document.activeElement.className);
+    for (let i = 0; i < 3; i++) {
+      press();
+      visited.push(app.document.activeElement.id || app.document.activeElement.className);
+    }
 
-    assert.deepEqual(visited, ["settings-date-format", "settings-date-linked", "btn btn-secondary"]);
+    assert.deepEqual(
+      visited,
+      ["settings-theme", "settings-date-format", "settings-date-linked", "btn btn-secondary"],
+    );
   });
 });
 

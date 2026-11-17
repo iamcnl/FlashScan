@@ -271,6 +271,7 @@ const SettingsDialog = {
     if (this._open || ConfirmDialog._open) return;
     this._open = true;
 
+    const theme    = this._field('settings-theme', 'Theme', Theme.OPTIONS, Theme.mode);
     const list     = this._field('settings-date-format', 'Date format', DateFmt.OPTIONS, DateFmt.mode);
     const exported = this._field(
       'settings-export-date-format', 'Exports', DateFmt.OPTIONS,
@@ -310,10 +311,11 @@ const SettingsDialog = {
     actions.append(close);
 
     const dialog = modalDialog('Settings', 'settings-title');
-    dialog.append(list.field, linkedRow, exported.field, preview, actions);
-    const finish = showModal(dialog, list.select, () => { this._open = false; });
+    dialog.append(theme.field, list.field, linkedRow, exported.field, preview, actions);
+    const finish = showModal(dialog, theme.select, () => { this._open = false; });
 
     close.addEventListener('click', finish);
+    theme.select.addEventListener('change', () => Theme.set(theme.select.value, true));
     list.select.addEventListener('change', () => {
       DateFmt.setMode(list.select.value);
       State.settings.dateFormat = DateFmt.mode;
@@ -762,7 +764,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const settings = await window.pywebview.api.get_settings();
     if (settings) {
       State.settings = { ...State.settings, ...settings };
-      Theme.set(settings.theme === 'dark' ? 'dark' : 'light');
+      Theme.set(settings.theme);
       DateFmt.setMode(settings.dateFormat);
       DateFmt.setExportMode(settings.exportDateFormat);
       setCheckbox('cb-hidden', settings.inclHidden);
@@ -1031,39 +1033,64 @@ function _devMode() {
   Nav.go(1);
 }
 
-/* ── Dark mode toggle ── */
+/* ── Theme ── */
 const Theme = {
+  OPTIONS: [
+    { value: 'light',  label: 'Light' },
+    { value: 'dark',   label: 'Dark' },
+    { value: 'system', label: 'System default' },
+  ],
+  mode: 'light',
+
   init() {
-    // Theme may already have been applied by the inline script in <head> — just sync the icons.
-    const isDark = document.documentElement.dataset.theme === 'dark';
-    document.getElementById('icon-sun').style.display  = isDark ? 'none' : '';
-    document.getElementById('icon-moon').style.display = isDark ? '' : 'none';
+    let stored;
+    try { stored = localStorage.getItem('flashscan-theme'); } catch (e) {}
+    this.mode = this.normalize(stored);
+    this.apply();
 
     document.getElementById('btn-theme-toggle')
       .addEventListener('click', () => this.toggle());
+    window.matchMedia?.('(prefers-color-scheme: dark)')
+      .addEventListener?.('change', () => this._onSystemChange());
+  },
+
+  normalize(mode) {
+    return this.OPTIONS.some(o => o.value === mode) ? mode : 'light';
+  },
+
+  systemIsDark() {
+    return !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+  },
+
+  isDark() {
+    return this.mode === 'dark' || (this.mode === 'system' && this.systemIsDark());
+  },
+
+  apply() {
+    const dark = this.isDark();
+    if (dark) document.documentElement.dataset.theme = 'dark';
+    else      delete document.documentElement.dataset.theme;
+    document.getElementById('icon-sun').style.display  = dark ? 'none' : '';
+    document.getElementById('icon-moon').style.display = dark ? '' : 'none';
   },
 
   toggle() {
-    const isDark = document.documentElement.dataset.theme === 'dark';
-    this.set(isDark ? 'light' : 'dark', true);
+    this.set(this.isDark() ? 'light' : 'dark', true);
   },
 
-  set(theme, persist = false) {
-    if (theme === 'dark') {
-      document.documentElement.dataset.theme = 'dark';
-      document.getElementById('icon-sun').style.display = 'none';
-      document.getElementById('icon-moon').style.display = '';
-    } else {
-      delete document.documentElement.dataset.theme;
-      document.getElementById('icon-sun').style.display = '';
-      document.getElementById('icon-moon').style.display = 'none';
-    }
-    try { localStorage.setItem('flashscan-theme', theme); } catch (e) {}
+  set(mode, persist = false) {
+    this.mode = this.normalize(mode);
+    this.apply();
+    try { localStorage.setItem('flashscan-theme', this.mode); } catch (e) {}
     if (persist) {
-      State.settings.theme = theme;
-      window.pywebview?.api?.save_settings({ theme });
+      State.settings.theme = this.mode;
+      window.pywebview?.api?.save_settings({ theme: this.mode });
     }
-  }
+  },
+
+  _onSystemChange() {
+    if (this.mode === 'system') this.apply();
+  },
 };
 
 Theme.init();
