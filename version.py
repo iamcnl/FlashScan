@@ -1,6 +1,6 @@
 """version.py — release version and the only URLs the app may open in a browser."""
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 LINKS = {
     "github":  "https://github.com/iamcnl/FlashScan",
