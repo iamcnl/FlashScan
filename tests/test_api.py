@@ -291,7 +291,7 @@ def test_untrusted_paths_are_refused_and_nothing_is_launched(app, tmp_path, pope
 def test_trusted_but_missing_paths_report_it(app, tmp_path, popen, operation):
     app._trust_root(str(tmp_path))
 
-    assert getattr(app, operation)(str(tmp_path / "gone.txt")) == {"error": "Path does not exist."}
+    assert getattr(app, operation)(str(tmp_path / "gone.txt")) == api._MISSING
     assert popen == []
 
 

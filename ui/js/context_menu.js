@@ -126,11 +126,11 @@ const ContextMenu = (() => {
 
     switch (action) {
       case 'open':
-        api ? api.open_path(_curPath) : console.log('[ctx] open_path:', _curPath);
+        api ? api.open_path(_curPath).then(r => _report('open {name}', r)) : console.log('[ctx] open_path:', _curPath);
         break;
 
       case 'explorer':
-        api ? api.reveal_in_explorer(_curPath) : console.log('[ctx] reveal_in_explorer:', _curPath);
+        api ? api.reveal_in_explorer(_curPath).then(r => _report('show {name} in its folder', r)) : console.log('[ctx] reveal_in_explorer:', _curPath);
         break;
 
       case 'copy-path':
@@ -143,10 +143,7 @@ const ContextMenu = (() => {
 
       case 'props':
         if (api) {
-          api.open_properties(_curPath).then(r => {
-            if (!r) return;
-            if (r.error) { _toast('Error: ' + r.error); }
-          });
+          api.open_properties(_curPath).then(r => _report('show properties of {name}', r));
         } else {
           _showMetaToast(_curItem);
         }
@@ -209,19 +206,26 @@ const ContextMenu = (() => {
     _toast(`${itm.name}  •  ${size}  •  ${date}`);
   }
 
+  function _report(phrase, outcome) {
+    if (!outcome?.error) return;
+    const name = _curItem?.name || String(_curPath).replace(/.*[/\\]/, '');
+    _toast(`Could not ${phrase.replace('{name}', name)}. ${outcome.error}`, 6000);
+  }
+
   /* ── Toast ───────────────────────────────────────────────── */
-  function _toast(msg) {
+  function _toast(msg, ms = 1800) {
     let t = document.getElementById('ctx-toast');
     if (!t) {
       t = document.createElement('div');
       t.id = 'ctx-toast';
       t.className = 'ctx-toast';
+      t.setAttribute('role', 'status');
       document.body.appendChild(t);
     }
     t.textContent = msg;
     t.classList.add('visible');
     clearTimeout(t._tid);
-    t._tid = setTimeout(() => t.classList.remove('visible'), 1800);
+    t._tid = setTimeout(() => t.classList.remove('visible'), ms);
   }
 
   return { show, hide };

@@ -47,6 +47,7 @@ MAX_LOGGED_LINKS = 20
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _DENIED = {"error": "Path is outside the scanned folders."}
 _UNKNOWN_LINK = {"error": "Unknown link."}
+_MISSING = {"error": "It no longer exists. It may have been moved or deleted."}
 _EXPORT_EXTS = {"MD": ".md", "TXT": ".txt", "JSON": ".json", "HTML": ".html"}
 
 
@@ -297,7 +298,7 @@ class API:
                 return _DENIED
             p = Path(path)
             if not p.exists():
-                return {"error": "Path does not exist."}
+                return _MISSING
             if _launches_code(p) and not _ask_to_launch(p.name):
                 return {"cancelled": True}
             os.startfile(str(p))
@@ -312,7 +313,7 @@ class API:
                 return _DENIED
             p = Path(path)
             if not p.exists():
-                return {"error": "Path does not exist."}
+                return _MISSING
             subprocess.Popen(["explorer", "/select,", str(p)])
             return {"ok": True}
         except Exception as e:
@@ -325,7 +326,7 @@ class API:
                 return _DENIED
             p = Path(path)
             if not p.exists():
-                return {"error": "Path does not exist."}
+                return _MISSING
             import ctypes
             import ctypes.wintypes
 

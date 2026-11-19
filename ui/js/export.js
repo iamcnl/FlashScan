@@ -288,6 +288,32 @@ const Export = {
     }
   },
 
+  async _fileAction(method, path, phrase) {
+    let outcome;
+    try { outcome = await window.pywebview?.api?.[method]?.(path); }
+    catch (e) { outcome = { error: String(e) }; }
+    const name = path.replace(/.*[/\\]/, '');
+    this._fileNote(outcome?.error ? `Could not ${phrase.replace('{name}', name)}. ${outcome.error}` : '');
+  },
+
+  _fileNote(text) {
+    const el = document.getElementById('export-result');
+    let note = el?.querySelector('.export-file-note');
+    if (!text) {
+      note?.remove();
+      return;
+    }
+    if (!note) {
+      note = document.createElement('div');
+      note.className = 'export-errors export-file-note';
+      note.setAttribute('role', 'alert');
+      const newScan = el.querySelector('.export-new-scan-row');
+      if (newScan) newScan.before(note);
+      else el.append(note);
+    }
+    note.textContent = text;
+  },
+
   _reveal(el) {
     el.scrollIntoView?.({ block: 'nearest' });
   },
@@ -326,10 +352,10 @@ const Export = {
     }${errHtml}<div class="export-new-scan-row"><button class="btn btn-secondary" id="btn-new-scan">← new scan</button></div>`;
 
     el.querySelectorAll('.export-file-link, .export-file-open').forEach(a => {
-      a.addEventListener('click', () => window.pywebview.api.open_path(a.dataset.path));
+      a.addEventListener('click', () => this._fileAction('open_path', a.dataset.path, 'open {name}'));
     });
     el.querySelectorAll('.export-file-reveal').forEach(a => {
-      a.addEventListener('click', () => window.pywebview.api.reveal_in_explorer(a.dataset.path));
+      a.addEventListener('click', () => this._fileAction('reveal_in_explorer', a.dataset.path, 'show {name} in its folder'));
     });
 
     document.getElementById('btn-new-scan')?.addEventListener('click', () => Nav.reset());

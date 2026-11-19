@@ -592,7 +592,8 @@ html {
 [data-theme="dark"] .row.row-folder:hover {
   background: var(--card3);
 }
-[data-theme="dark"] .export-result.error {
+[data-theme="dark"] .export-result.error,
+[data-theme="dark"] .export-errors {
   color: #e07070;
 }
 [data-theme="dark"] .row-size,
