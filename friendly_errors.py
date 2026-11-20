@@ -7,6 +7,7 @@ import errno
 GENERIC_ERROR = "Something went wrong. Details are in the log."
 NOT_A_FOLDER = "That location is a file, not a folder."
 PATH_TOO_LONG = "That path is too long."
+INVALID_PATH = "That isn't a valid path."
 DISK_FULL = "Not enough free space there."
 NO_ASSOCIATION = "No app is set up to open that file."
 NO_PERMISSION = {
@@ -18,6 +19,8 @@ ERROR_ACCESS_DENIED = 5
 ERROR_WRITE_PROTECT = 19
 ERROR_HANDLE_DISK_FULL = 39
 ERROR_DISK_FULL = 112
+ERROR_INVALID_NAME = 123
+ERROR_BAD_PATHNAME = 161
 ERROR_NO_ASSOCIATION = 1155
 ERROR_FILENAME_EXCED_RANGE = 206
 ERROR_DIRECTORY = 267
@@ -28,6 +31,7 @@ def _errnos(*names: str) -> frozenset:
 
 
 _TOO_LONG = (_errnos("ENAMETOOLONG"), frozenset({ERROR_FILENAME_EXCED_RANGE}))
+_INVALID = (frozenset(), frozenset({ERROR_INVALID_NAME, ERROR_BAD_PATHNAME}))
 _NOT_A_DIR = (_errnos("ENOTDIR"), frozenset({ERROR_DIRECTORY}))
 _DENIED = (_errnos("EACCES", "EPERM", "EROFS"), frozenset({ERROR_ACCESS_DENIED, ERROR_WRITE_PROTECT}))
 _NO_SPACE = (_errnos("ENOSPC", "EDQUOT"), frozenset({ERROR_HANDLE_DISK_FULL, ERROR_DISK_FULL}))
@@ -49,6 +53,8 @@ def describe_error(exc: BaseException, action: str = "read") -> str:
     # Windows reports an over-long path as FileNotFoundError, so this check comes first
     if matches(_TOO_LONG):
         return PATH_TOO_LONG
+    if matches(_INVALID):
+        return INVALID_PATH
     if matches(_NOT_A_DIR) or isinstance(exc, NotADirectoryError):
         return NOT_A_FOLDER
     if matches(_DENIED) or isinstance(exc, PermissionError):

@@ -201,7 +201,9 @@ const Export = {
     if (this._running) return;
 
     const fmts   = this._selectedFormats();
-    const outDir = document.getElementById('out-input')?.value?.trim();
+    const outField = document.getElementById('out-input');
+    const outDir = cleanPath(outField?.value);
+    if (outField) outField.value = outDir;
 
     if (!fmts.length) {
       this._showResult('Select at least one format.', 'error');

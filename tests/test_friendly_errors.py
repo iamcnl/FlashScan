@@ -3,8 +3,8 @@ import errno
 import pytest
 
 from friendly_errors import (
-    DISK_FULL, GENERIC_ERROR, NO_ASSOCIATION, NO_PERMISSION, NOT_A_FOLDER, PATH_TOO_LONG,
-    describe_error,
+    DISK_FULL, GENERIC_ERROR, INVALID_PATH, NO_ASSOCIATION, NO_PERMISSION, NOT_A_FOLDER,
+    PATH_TOO_LONG, describe_error,
 )
 
 
@@ -25,6 +25,9 @@ def os_error(code, winerror=None, kind=OSError):
     (os_error(errno.EIO, winerror=112), DISK_FULL),
     (os_error(errno.EIO, winerror=39), DISK_FULL),
     (os_error(errno.EIO, winerror=1155), NO_ASSOCIATION),
+    (os_error(errno.EINVAL, winerror=123), INVALID_PATH),
+    (os_error(errno.ENOENT, winerror=161, kind=FileNotFoundError), INVALID_PATH),
+    (os_error(errno.EINVAL), GENERIC_ERROR),
     (os_error(errno.EIO), GENERIC_ERROR),
     (RuntimeError("raw detail"), GENERIC_ERROR),
     (ValueError("embedded null byte"), GENERIC_ERROR),

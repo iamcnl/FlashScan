@@ -36,7 +36,8 @@ import logger
 import settings
 from version import LINKS, __version__
 from friendly_errors import (
-    ERROR_FILENAME_EXCED_RANGE, NO_PERMISSION, NOT_A_FOLDER, describe_error,
+    ERROR_BAD_PATHNAME, ERROR_FILENAME_EXCED_RANGE, ERROR_INVALID_NAME, INVALID_PATH,
+    NO_PERMISSION, NOT_A_FOLDER, describe_error,
 )
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,10 @@ MAX_LOGGED_UNREADABLE = 20
 MAX_LOGGED_LINKS = 20
 
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+_INVALID_PATH_CHARS = re.compile(r'[*?<>|"\x00-\x1f]')
+_DEVICE_PREFIXES = ("\\\\?\\", "\\\\.\\")
+_BARE_DRIVE = re.compile(r"[A-Za-z]:")
+_UNCHECKABLE = frozenset({ERROR_FILENAME_EXCED_RANGE, ERROR_INVALID_NAME, ERROR_BAD_PATHNAME})
 _DENIED = {"error": "Path is outside the scanned folders."}
 _UNKNOWN_LINK = {"error": "Unknown link."}
 _MISSING = {"error": "It no longer exists. It may have been moved or deleted."}
@@ -56,10 +61,28 @@ def _folder_state(path) -> str:
     try:
         mode = os.stat(path).st_mode
     except (FileNotFoundError, NotADirectoryError) as e:
-        if getattr(e, "winerror", None) == ERROR_FILENAME_EXCED_RANGE:
+        if getattr(e, "winerror", None) in _UNCHECKABLE:
             raise
         return "missing"
     return "folder" if stat.S_ISDIR(mode) else "file"
+
+
+def _path_error(exc: Exception, action: str) -> str:
+    """ValueError means the text cannot be encoded for the OS (a lone surrogate on some systems)."""
+    return INVALID_PATH if isinstance(exc, ValueError) else describe_error(exc, action)
+
+
+def _clean_path(raw, empty: str) -> tuple[str, str | None]:
+    """Returns (path, problem). Strips pasted quotes and turns a bare "D:" (the current folder on D:) into "D:\\"."""
+    text = raw.strip().strip('"').strip() if isinstance(raw, str) else ""
+    if _BARE_DRIVE.fullmatch(text):
+        text += "\\"
+    if not text:
+        return text, empty
+    body = text[len(_DEVICE_PREFIXES[0]):] if text.startswith(_DEVICE_PREFIXES) else text
+    if _INVALID_PATH_CHARS.search(body):
+        return text, INVALID_PATH
+    return text, None
 
 
 # Each evaluate_js call blocks the scan thread (about 0.6 ms measured, ~20% of a 105k-file scan at one per 100 files).
@@ -381,7 +404,7 @@ class API:
         """
         import scanner  # lazy
 
-        path        = params.get("path", "")
+        path, path_problem = _clean_path(params.get("path"), "Enter a path.")
         depth       = int(params.get("depth", 10))
         incl_hidden = bool(params.get("incl_hidden", False))
         incl_system = bool(params.get("incl_system", False))
@@ -389,16 +412,19 @@ class API:
         errors = []
         if not (1 <= depth <= 50):
             errors.append("Invalid scan depth (allowed: 1–50).")
-        try:
-            folder = _folder_state(path)
-        except (OSError, ValueError) as e:
-            log.warning("Scan path check failed: %r (path=%r)", e, path)
-            errors.append(describe_error(e, "read"))
+        if path_problem:
+            errors.append(path_problem)
         else:
-            if folder == "missing":
-                errors.append("Path does not exist.")
-            elif folder == "file":
-                errors.append(NOT_A_FOLDER)
+            try:
+                folder = _folder_state(path)
+            except (OSError, ValueError) as e:
+                log.warning("Scan path check failed: %r (path=%r)", e, path)
+                errors.append(_path_error(e, "read"))
+            else:
+                if folder == "missing":
+                    errors.append("Path does not exist.")
+                elif folder == "file":
+                    errors.append(NOT_A_FOLDER)
         if errors:
             log.warning("Scan rejected: %s (path=%r)", "; ".join(errors), path)
             return {"errors": errors}
@@ -523,12 +549,15 @@ class API:
                                folder_states: {path: state} (folders that are not "full"),
                                folder_notes, hidden_exts: [ext] | null } }
         """
-        out_path = Path(params.get("output_dir", ""))
+        output_dir, problem = _clean_path(params.get("output_dir"), "Enter an output folder.")
+        if problem:
+            return self._refuse_export(problem, output_dir)
+        out_path = Path(output_dir)
         try:
             folder = _folder_state(out_path)
         except (OSError, ValueError) as e:
             log.warning("Output folder check failed: %r (output=%r)", e, str(out_path))
-            return self._refuse_export(describe_error(e, "write"), out_path)
+            return self._refuse_export(_path_error(e, "write"), out_path)
         if folder == "missing":
             return self._refuse_export("Output folder does not exist.", out_path)
         if folder == "file":
@@ -563,7 +592,7 @@ class API:
         return not any(item[1] == "file" or item[6] == "name" for item in items)
 
     @staticmethod
-    def _refuse_export(message: str, out_path: Path) -> dict:
+    def _refuse_export(message: str, out_path: Path | str) -> dict:
         log.warning("Export rejected: %s (output=%r)", message, str(out_path))
         return {"success": False, "error": message}
 

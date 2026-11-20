@@ -9,6 +9,11 @@
 
 const UNEXPECTED_ERROR = 'Something went wrong. Details are in the log.';
 
+function cleanPath(raw) {
+  const text = String(raw ?? '').trim().replace(/^"+|"+$/g, '').trim();
+  return /^[A-Za-z]:$/.test(text) ? text + '\\' : text;
+}
+
 const _HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 function escapeHtml(value) {

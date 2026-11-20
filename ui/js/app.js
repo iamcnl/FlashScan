@@ -1041,7 +1041,9 @@ function abortScan(msg, fields) {
 function startScan() {
   if (Scan.running) return;
 
-  const path  = document.getElementById('path-input')?.value?.trim();
+  const pathField = document.getElementById('path-input');
+  const path  = cleanPath(pathField?.value);
+  if (pathField) pathField.value = path;
   const depthRaw = document.getElementById('depth-input')?.value?.trim();
   const depth = parseInt(depthRaw);
 

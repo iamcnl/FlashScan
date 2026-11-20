@@ -16,7 +16,8 @@ import scanner
 import settings
 import version
 from friendly_errors import (
-    DISK_FULL, GENERIC_ERROR, NO_ASSOCIATION, NO_PERMISSION, NOT_A_FOLDER, PATH_TOO_LONG,
+    DISK_FULL, GENERIC_ERROR, INVALID_PATH, NO_ASSOCIATION, NO_PERMISSION, NOT_A_FOLDER,
+    PATH_TOO_LONG,
 )
 from ui import api
 
@@ -502,6 +503,97 @@ def test_folder_state_does_not_mistake_a_windows_too_long_path_for_a_missing_one
         api._folder_state("x")
 
 
+@pytest.mark.parametrize("winerror", [123, 161])
+def test_folder_state_does_not_mistake_an_invalid_windows_path_for_a_missing_one(monkeypatch, winerror):
+    def invalid(path):
+        exc = FileNotFoundError(errno.ENOENT, "bad name")
+        exc.winerror = winerror
+        raise exc
+
+    monkeypatch.setattr(api, "os", types.SimpleNamespace(stat=invalid))
+
+    with pytest.raises(FileNotFoundError):
+        api._folder_state("x")
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ('"C:\\My Folder"', "C:\\My Folder"),
+    ('  "C:\\My Folder"  ', "C:\\My Folder"),
+    ("  C:\\My Folder  ", "C:\\My Folder"),
+    ("D:", "D:\\"),
+    ('"d:"', "d:\\"),
+    ("D:\\", "D:\\"),
+    ("D:folder", "D:folder"),
+    ("\\\\?\\C:\\Folder", "\\\\?\\C:\\Folder"),
+    ("\\\\.\\C:\\Folder", "\\\\.\\C:\\Folder"),
+    ("\\\\server\\share", "\\\\server\\share"),
+    ("/tmp/some folder", "/tmp/some folder"),
+])
+def test_clean_path_accepts_what_the_os_can_use(raw, expected):
+    assert api._clean_path(raw, "empty") == (expected, None)
+
+
+@pytest.mark.parametrize("raw", [
+    "C:\\a*b", "C:\\a?b", "C:\\a<b", "C:\\a>b", "C:\\a|b", 'C:\\a"b',
+    "C:\\a\x00b", "C:\\a\nb", "\\\\?\\C:\\a*b", "\\\\?\\C:\\a?b",
+])
+def test_clean_path_rejects_what_the_os_cannot_use(raw):
+    assert api._clean_path(raw, "empty")[1] == INVALID_PATH
+
+
+@pytest.mark.parametrize("raw", ["", "   ", '""', None, 5])
+def test_clean_path_reports_an_empty_path_with_the_given_message(raw):
+    assert api._clean_path(raw, "empty") == (raw.strip().strip('"') if isinstance(raw, str) else "", "empty")
+
+
+def test_scan_accepts_a_path_pasted_with_quotes_and_uses_the_clean_one(app, window, drive):
+    assert app.scan({"path": f'"{drive}"', "depth": 5}) == {"async": True}
+    result = window.take_json("onScanDone")
+
+    assert result["file_count"] == 4
+    assert app._scan_data["path"] == str(drive)
+    assert settings.load()["lastPath"] == str(drive)
+
+
+def test_clean_path_keeps_a_lone_surrogate_for_the_os_to_judge():
+    assert api._clean_path("C:\\bad\udc80", "empty") == ("C:\\bad\udc80", None)
+
+
+@pytest.mark.parametrize("raw", ["", "  ", "C:\\a*b"])
+def test_scan_refuses_paths_that_are_empty_or_invalid_without_touching_the_disk(
+    app, window, monkeypatch, raw
+):
+    monkeypatch.setattr(api, "_folder_state", lambda path: pytest.fail("the disk was checked"))
+
+    reply = app.scan({"path": raw, "depth": 5})
+
+    assert reply == {"errors": ["Enter a path." if not raw.strip() else INVALID_PATH]}
+    assert window.calls == []
+
+
+def test_scan_explains_an_invalid_windows_path_that_only_the_os_can_reject(app, tmp_path, monkeypatch):
+    def invalid(path):
+        exc = OSError(errno.EINVAL, "bad name", str(path))
+        exc.winerror = 123
+        raise exc
+
+    monkeypatch.setattr(api, "_folder_state", invalid)
+
+    assert app.scan(scan_params(tmp_path)) == {"errors": [INVALID_PATH]}
+
+
+def test_scan_and_export_call_a_path_the_os_cannot_encode_invalid(app, tmp_path, monkeypatch):
+    def unencodable(path):
+        raise UnicodeEncodeError("utf-8", "\udc80", 0, 1, "surrogates not allowed")
+
+    monkeypatch.setattr(api, "_folder_state", unencodable)
+
+    assert app.scan(scan_params(tmp_path)) == {"errors": [INVALID_PATH]}
+    assert app.export({"scan_id": 1, "output_dir": str(tmp_path), "selection": {}}) == {
+        "success": False, "error": INVALID_PATH,
+    }
+
+
 def test_scan_reports_every_validation_error_at_once(app, tmp_path):
     reply = app.scan(scan_params(tmp_path / "nope", depth=0))
 
@@ -789,6 +881,28 @@ def test_a_failed_export_result_is_replaced_by_a_message_the_ui_can_show(app, wi
 
 def seed_scan(app, tmp_path, scan_id=1):
     app._scan_data = {"id": scan_id, "tree": [], "path": str(tmp_path), "volume_label": ""}
+
+
+@pytest.mark.parametrize("raw", ["", "   ", '""', "C:\\a*b"])
+def test_export_refuses_an_empty_or_invalid_output_folder_instead_of_using_the_current_one(
+    app, window, drive, raw
+):
+    scan = run_scan(app, window, drive)
+
+    reply = app.export({"scan_id": scan["scan_id"], "output_dir": raw, "selection": {}})
+
+    expected = "Enter an output folder." if not raw.strip('" ') else INVALID_PATH
+    assert reply == {"success": False, "error": expected}
+    assert window.starting("onExportProgress") == []
+
+
+def test_export_accepts_an_output_folder_pasted_with_quotes(app, window, drive, out):
+    scan = run_scan(app, window, drive)
+
+    result = run_export(app, window, scan["scan_id"], f'"{out}"')
+
+    assert result["success"] is True
+    assert Path(result["saved"][0]).parent == out
 
 
 def test_export_needs_an_existing_output_folder(app, tmp_path):
