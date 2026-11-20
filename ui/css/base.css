@@ -35,6 +35,8 @@ body {
   border-radius: var(--r-sm);
 }
 
+[tabindex="-1"]:focus-visible { outline: none; }
+
 .sr-only {
   position: absolute;
   width: 1px;

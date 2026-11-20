@@ -15,6 +15,15 @@ const CHECK_SVG = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" str
 const LOCKED_STEP_HINT = 'Scan a folder first';
 const HELD_STEP_HINT   = 'Export in progress';
 
+const STEP_FOCUS_TARGETS = ['path-input', 'tree', 'export-heading'];
+
+function announce(message) {
+  const el = document.getElementById('tree-live');
+  if (!el) return;
+  el.textContent = '';
+  setTimeout(() => { el.textContent = message; }, 50);
+}
+
 const Nav = {
   _current: 0,
   _maxReached: 0,
@@ -24,6 +33,7 @@ const Nav = {
     if (this._held && n !== this._current) return;  // an export is running
     if (n > this._maxReached && n !== 0) return;  // cannot skip forward
 
+    const changed = n !== this._current;
     this._current = n;
     if (n > this._maxReached) this._maxReached = n;
 
@@ -36,6 +46,8 @@ const Nav = {
 
     // Side effects on transition
     if (n === 2) { Export.updateSummary(); Export.renderNameChips(); }
+
+    if (changed) document.getElementById(STEP_FOCUS_TARGETS[n])?.focus();
   },
 
   unlock(n) {
@@ -1154,9 +1166,10 @@ async function applyScanResult(result) {
 
   const txt = document.getElementById('scan-status-text');
   const bar  = document.getElementById('scan-progress-bar');
-  if (txt) txt.textContent = `Done — ${file_count} files, ${folder_count} folders`
+  const summary = `Done — ${file_count} files, ${folder_count} folders`
     + `${skipped ? `, ${skipped} skipped` : ''}${unreadable_count ? `, ${unreadable_count} unreadable` : ''}`
     + `${links_skipped ? `, ${links_skipped} ${links_skipped === 1 ? 'link' : 'links'} not followed` : ''}.`;
+  if (txt) txt.textContent = summary;
   if (bar) bar.classList.remove('animated');
 
   // Show disk name
@@ -1170,6 +1183,7 @@ async function applyScanResult(result) {
   Nav.unlock(1);
   Nav.unlock(2);
   Nav.go(1);
+  announce(summary);
 
   // Save settings
   try {

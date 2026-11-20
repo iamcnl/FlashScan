@@ -336,7 +336,6 @@
         <div class="tree" id="tree">
           <!-- Dynamically populated via tree.js -->
         </div>
-        <div class="sr-only" id="tree-live" role="status" aria-live="polite"></div>
 
         <div class="statusbar">
           <span class="stat" id="stat-files">0 files</span>
@@ -370,7 +369,7 @@
     <div class="export-page">
       <div class="export-card">
 
-        <h2>Export</h2>
+        <h2 id="export-heading" tabindex="-1">Export</h2>
 
         <div>
           <span class="field-label" style="margin-bottom:8px;">format</span>
@@ -473,6 +472,8 @@
       </div>
     </div>
   </div>
+
+  <div class="sr-only" id="tree-live" role="status" aria-live="polite"></div>
 
 </div><!-- /app -->
 
