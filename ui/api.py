@@ -551,19 +551,19 @@ class API:
         """
         output_dir, problem = _clean_path(params.get("output_dir"), "Enter an output folder.")
         if problem:
-            return self._refuse_export(problem, output_dir)
+            return self._refuse_export(problem, output_dir, "output_dir")
         out_path = Path(output_dir)
         try:
             folder = _folder_state(out_path)
         except (OSError, ValueError) as e:
             log.warning("Output folder check failed: %r (output=%r)", e, str(out_path))
-            return self._refuse_export(_path_error(e, "write"), out_path)
+            return self._refuse_export(_path_error(e, "write"), out_path, "output_dir")
         if folder == "missing":
-            return self._refuse_export("Output folder does not exist.", out_path)
+            return self._refuse_export("Output folder does not exist.", out_path, "output_dir")
         if folder == "file":
-            return self._refuse_export(NOT_A_FOLDER, out_path)
+            return self._refuse_export(NOT_A_FOLDER, out_path, "output_dir")
         if not os.access(out_path, os.W_OK):
-            return self._refuse_export(NO_PERMISSION["write"], out_path)
+            return self._refuse_export(NO_PERMISSION["write"], out_path, "output_dir")
 
         with self._scan_lock:
             scan = self._scan_data
@@ -592,9 +592,12 @@ class API:
         return not any(item[1] == "file" or item[6] == "name" for item in items)
 
     @staticmethod
-    def _refuse_export(message: str, out_path: Path | str) -> dict:
+    def _refuse_export(message: str, out_path: Path | str, field: str | None = None) -> dict:
         log.warning("Export rejected: %s (output=%r)", message, str(out_path))
-        return {"success": False, "error": message}
+        reply = {"success": False, "error": message}
+        if field:
+            reply["field"] = field
+        return reply
 
     def _run_export(self, scan: dict, selection: dict, params: dict, out_path: Path) -> None:
         try:

@@ -188,6 +188,7 @@ const Export = {
       if (dir) {
         const el = document.getElementById('out-input');
         if (el) el.value = dir;
+        this.setOutputInvalid(false);
         window.pywebview?.api?.save_settings({ lastOutput: dir });
       }
     } catch (e) {
@@ -204,6 +205,7 @@ const Export = {
     const outField = document.getElementById('out-input');
     const outDir = cleanPath(outField?.value);
     if (outField) outField.value = outDir;
+    this.setOutputInvalid(false);
 
     if (!fmts.length) {
       this._showResult('Select at least one format.', 'error');
@@ -215,7 +217,7 @@ const Export = {
     }
     if (!outDir) {
       this._showResult('Enter an output folder.', 'error');
-      document.getElementById('out-input')?.focus();
+      this.setOutputInvalid(true);
       return;
     }
 
@@ -239,10 +241,24 @@ const Export = {
       this._setRunning(false);
       if (result.busy) this._showResult('An export is already running.', 'error');
       else             this._showResult('Error: ' + (result.error || 'unknown error'), 'error');
+      if (result.field === 'output_dir') this.setOutputInvalid(true);
     } catch (e) {
       this._setRunning(false);
       console.error(e);
       this._showResult(UNEXPECTED_ERROR, 'error');
+    }
+  },
+
+  setOutputInvalid(invalid) {
+    const el = document.getElementById('out-input');
+    if (!el) return;
+    if (invalid) {
+      el.setAttribute('aria-invalid', 'true');
+      el.setAttribute('aria-describedby', 'export-result');
+      el.focus({ preventScroll: true });
+    } else {
+      el.removeAttribute('aria-invalid');
+      el.removeAttribute('aria-describedby');
     }
   },
 

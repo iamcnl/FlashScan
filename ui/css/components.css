@@ -877,15 +877,33 @@
   border-radius: var(--r-pill);
   pointer-events: none;
   opacity: 0;
-  transition: opacity .18s ease, transform .18s ease;
   z-index: 9999;
-  white-space: nowrap;
+  visibility: hidden;
+  max-width: min(560px, calc(100vw - 2 * var(--sp-4)));
+  text-align: center;
+  transition: opacity .18s ease, transform .18s ease, visibility 0s .18s;
 }
 
 .ctx-toast.visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+  visibility: visible;
+  transition-delay: 0s;
 }
+
+.ctx-toast.has-action { pointer-events: auto; }
+
+.ctx-toast-action {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.ctx-toast-action:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: var(--r-sm); }
 
 /* ── Calendar month/year drill-down grids ── */
 .adv-cal-month,

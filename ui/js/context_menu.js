@@ -213,7 +213,7 @@ const ContextMenu = (() => {
   }
 
   /* ── Toast ───────────────────────────────────────────────── */
-  function _toast(msg, ms = 1800) {
+  function _toast(msg, ms = 1800, action = null) {
     let t = document.getElementById('ctx-toast');
     if (!t) {
       t = document.createElement('div');
@@ -223,10 +223,22 @@ const ContextMenu = (() => {
       document.body.appendChild(t);
     }
     t.textContent = msg;
+    if (action) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ctx-toast-action';
+      button.textContent = action.label;
+      button.addEventListener('click', () => {
+        t.classList.remove('visible');
+        action.run();
+      });
+      t.append(' ', button);
+    }
+    t.classList.toggle('has-action', Boolean(action));
     t.classList.add('visible');
     clearTimeout(t._tid);
     t._tid = setTimeout(() => t.classList.remove('visible'), ms);
   }
 
-  return { show, hide };
+  return { show, hide, toast: _toast };
 })();

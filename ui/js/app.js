@@ -784,7 +784,13 @@ const ProfileNote = {
     note.title = tooltip;
     note.style.display = 'flex';
     this._fit();
+    if (note.classList.contains('is-clipped')) this._toastInstead(mode, tooltip, autoHideMs);
     if (autoHideMs) this._timer = setTimeout(() => this.hide(), autoHideMs);
+  },
+
+  _toastInstead(mode, message, autoHideMs) {
+    const undo = mode === 'reset' ? { label: 'undo', run: () => this._mode === 'reset' && this.undo() } : null;
+    ContextMenu.toast(message, autoHideMs || 4000, undo);
   },
 
   // Never show a clipped sliver: if the text does not fit in full, hide the whole note.
@@ -933,6 +939,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Enter') startScan();
   });
   SCAN_FIELDS.forEach(id => document.getElementById(id)?.addEventListener('input', clearScanError));
+  document.getElementById('out-input')?.addEventListener('input', () => Export.setOutputInvalid(false));
 
   // Scan checkboxes
   initCheckbox('cb-hidden', 'inclHidden');
@@ -1291,19 +1298,31 @@ const Theme = {
 
 Theme.init();
 
+function toastOpenFailure(what, outcome) {
+  const message = outcome?.error ? `Could not open ${what}. ${outcome.error}` : UNEXPECTED_ERROR;
+  console.error(message);
+  ContextMenu.toast(message, 6000);
+}
+
 document.addEventListener('click', async e => {
   const link = e.target.closest?.('[data-link]');
   if (!link) return;
   e.preventDefault();
   try {
     const r = await window.pywebview?.api?.open_external(link.dataset.link);
-    if (r?.error) console.error('Cannot open link: ' + r.error);
-  } catch (err) { console.error(err); }
+    if (!r || r.error) toastOpenFailure('the link', r);
+  } catch (err) {
+    console.error(err);
+    toastOpenFailure('the link');
+  }
 });
 
 document.getElementById('btn-open-log')?.addEventListener('click', async () => {
   try {
     const r = await window.pywebview?.api?.open_log_folder();
-    if (r?.error) console.error('Cannot open log folder: ' + r.error);
-  } catch (e) { console.error(e); }
+    if (!r || r.error) toastOpenFailure('the log folder', r);
+  } catch (e) {
+    console.error(e);
+    toastOpenFailure('the log folder');
+  }
 });

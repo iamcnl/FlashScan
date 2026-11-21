@@ -590,7 +590,7 @@ def test_scan_and_export_call_a_path_the_os_cannot_encode_invalid(app, tmp_path,
 
     assert app.scan(scan_params(tmp_path)) == {"errors": [INVALID_PATH]}
     assert app.export({"scan_id": 1, "output_dir": str(tmp_path), "selection": {}}) == {
-        "success": False, "error": INVALID_PATH,
+        "success": False, "error": INVALID_PATH, "field": "output_dir",
     }
 
 
@@ -892,7 +892,7 @@ def test_export_refuses_an_empty_or_invalid_output_folder_instead_of_using_the_c
     reply = app.export({"scan_id": scan["scan_id"], "output_dir": raw, "selection": {}})
 
     expected = "Enter an output folder." if not raw.strip('" ') else INVALID_PATH
-    assert reply == {"success": False, "error": expected}
+    assert reply == {"success": False, "error": expected, "field": "output_dir"}
     assert window.starting("onExportProgress") == []
 
 
@@ -909,7 +909,7 @@ def test_export_needs_an_existing_output_folder(app, tmp_path):
     seed_scan(app, tmp_path)
     reply = app.export({"scan_id": 1, "output_dir": str(tmp_path / "nope"), "selection": {}})
 
-    assert reply == {"success": False, "error": "Output folder does not exist."}
+    assert reply == {"success": False, "error": "Output folder does not exist.", "field": "output_dir"}
 
 
 def test_export_needs_a_writable_output_folder(app, tmp_path, out, monkeypatch):
@@ -919,6 +919,7 @@ def test_export_needs_a_writable_output_folder(app, tmp_path, out, monkeypatch):
 
     assert reply["success"] is False
     assert reply["error"] == NO_PERMISSION["write"]
+    assert reply["field"] == "output_dir"
 
 
 @pytest.mark.parametrize("scan_id", [None, 0, 2, "1"])
@@ -1218,7 +1219,7 @@ def test_export_refuses_an_output_path_that_is_a_file(app, window, drive, tmp_pa
         "scan_id": scan["scan_id"], "formats": ["MD"], "output_dir": str(target), "selection": {},
     })
 
-    assert reply == {"success": False, "error": NOT_A_FOLDER}
+    assert reply == {"success": False, "error": NOT_A_FOLDER, "field": "output_dir"}
     assert target.read_text() == "x"
 
 
@@ -1235,7 +1236,7 @@ def test_export_explains_an_output_folder_that_cannot_be_checked(
         "scan_id": scan["scan_id"], "formats": ["MD"], "output_dir": str(out), "selection": {},
     })
 
-    assert reply == {"success": False, "error": PATH_TOO_LONG}
+    assert reply == {"success": False, "error": PATH_TOO_LONG, "field": "output_dir"}
     assert "File name too long" in caplog.text
 
 
