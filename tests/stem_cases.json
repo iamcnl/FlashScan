@@ -1,0 +1,158 @@
+[
+ {
+  "raw": "report",
+  "expected": "report"
+ },
+ {
+  "raw": "a/b\\c",
+  "expected": "abc"
+ },
+ {
+  "raw": "../../etc/passwd",
+  "expected": "etcpasswd"
+ },
+ {
+  "raw": "../x",
+  "expected": "x"
+ },
+ {
+  "raw": "..x",
+  "expected": "x"
+ },
+ {
+  "raw": "na:me*?\"<>|",
+  "expected": "name"
+ },
+ {
+  "raw": "  spaced  ",
+  "expected": "spaced"
+ },
+ {
+  "raw": ".hidden.",
+  "expected": "hidden"
+ },
+ {
+  "raw": "a\u0000b\u001fc",
+  "expected": "abc"
+ },
+ {
+  "raw": "a\tb\nc",
+  "expected": "abc"
+ },
+ {
+  "raw": "a   b",
+  "expected": "a b"
+ },
+ {
+  "raw": "a\u00a0\u3000b",
+  "expected": "a b"
+ },
+ {
+  "raw": "a\u0085b",
+  "expected": "a b"
+ },
+ {
+  "raw": "a\ufeffb",
+  "expected": "a\ufeffb"
+ },
+ {
+  "raw": "a .",
+  "expected": "a"
+ },
+ {
+  "raw": "...",
+  "expected": ""
+ },
+ {
+  "raw": " . ",
+  "expected": ""
+ },
+ {
+  "raw": "",
+  "expected": ""
+ },
+ {
+  "raw": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ },
+ {
+  "raw": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b",
+  "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "raw": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\ud83d\ude00\ud83d\ude00",
+  "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\ud83d\ude00"
+ },
+ {
+  "raw": "CON",
+  "expected": "_CON"
+ },
+ {
+  "raw": "con",
+  "expected": "_con"
+ },
+ {
+  "raw": "Nul.txt",
+  "expected": "_Nul.txt"
+ },
+ {
+  "raw": "PRN",
+  "expected": "_PRN"
+ },
+ {
+  "raw": "AUX",
+  "expected": "_AUX"
+ },
+ {
+  "raw": "COM1",
+  "expected": "_COM1"
+ },
+ {
+  "raw": "COM9",
+  "expected": "_COM9"
+ },
+ {
+  "raw": "LPT9",
+  "expected": "_LPT9"
+ },
+ {
+  "raw": "com\u00b9",
+  "expected": "_com\u00b9"
+ },
+ {
+  "raw": "COM0",
+  "expected": "COM0"
+ },
+ {
+  "raw": "COM10",
+  "expected": "COM10"
+ },
+ {
+  "raw": "CONSOLE",
+  "expected": "CONSOLE"
+ },
+ {
+  "raw": "my CON",
+  "expected": "my CON"
+ },
+ {
+  "raw": "a.CON",
+  "expected": "a.CON"
+ },
+ {
+  "raw": "CON .",
+  "expected": "_CON"
+ },
+ {
+  "raw": "CON .x",
+  "expected": "_CON .x"
+ },
+ {
+  "raw": "CON.yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+  "expected": "_CON.yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+ },
+ {
+  "raw": "2026-11-21_My Disk_LIST",
+  "expected": "2026-11-21_My Disk_LIST"
+ }
+]

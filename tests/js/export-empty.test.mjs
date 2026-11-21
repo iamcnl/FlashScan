@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -91,5 +92,37 @@ test("export: nothing selected is refused before the backend is called", async (
     assert.equal(result.textContent, "Nothing selected to export.");
     assert.ok(result.classList.contains("error"));
     assert.equal(app.window.exportCalls, 0);
+  });
+});
+
+const STEM_CASES = JSON.parse(readFileSync(new URL("../stem_cases.json", import.meta.url), "utf8"));
+const stem = (app, raw) => app.evaluate("return Export._sanitizeStem(V.raw);", { raw });
+
+test("file names: the preview cleans a name exactly as the backend does", async () => {
+  await withApp(async (app) => {
+    for (const { raw, expected } of STEM_CASES) {
+      assert.equal(stem(app, raw), expected, JSON.stringify(raw));
+      assert.equal(stem(app, expected), expected, `again: ${JSON.stringify(expected)}`);
+    }
+  });
+});
+
+test("file names: a long disk name cannot push the default name past the cap", async () => {
+  await withApp(async (app) => {
+    app.evaluate("State.volumeLabel = 'D'.repeat(400);");
+
+    const name = app.evaluate("return Export._defaultStem('MD');");
+
+    assert.equal(Array.from(name).length, 150);
+    assert.equal(stem(app, name), name);
+  });
+});
+
+test("file names: the name editor limits its input to the cap", async () => {
+  await withApp(async (app) => {
+    load(app);
+    app.evaluate("document.querySelector('.fmt-cell[data-fmt=MD] .fmt-input').checked = true;");
+
+    assert.equal(summary(app).querySelector(".summary-fname-input").getAttribute("maxlength"), "150");
   });
 });

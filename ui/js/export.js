@@ -6,6 +6,12 @@
  * onExportDone() shows the result. Also updates the summary box on the export screen.
  */
 
+const STEM_MAX = 150;
+const STEM_INVALID = /[\\/:*?"<>|\u0000-\u001f]/g;
+const STEM_SPACES = /[ \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/g;
+const STEM_EDGES = /^[ .]+|[ .]+$/g;
+const STEM_DEVICE = /^(?:con|prn|aux|nul|(?:com|lpt)[1-9\u00b9\u00b2\u00b3])$/i;
+
 const Export = {
   // stem overrides keyed by format: { MD: "my_report", HTML: "report" }
   _nameOverrides: {},
@@ -49,12 +55,14 @@ const Export = {
     const now      = new Date();
     const pad      = n => String(n).padStart(2, '0');
     const ts       = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    const diskName = this._diskName();
-    return `${ts}_${this._sanitizeStem(diskName)}_LIST`;
+    return this._sanitizeStem(`${ts}_${this._diskName()}_LIST`);
   },
 
+  // Must stay identical to _safe_stem in api.py (tests/stem_cases.json checks both)
   _sanitizeStem(raw) {
-    return raw.replace(/[/\\:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+    let text = String(raw ?? '').replace(STEM_INVALID, '').replace(STEM_SPACES, ' ').replace(STEM_EDGES, '');
+    if (STEM_DEVICE.test(text.split('.')[0].replace(/ +$/, ''))) text = '_' + text;
+    return Array.from(text).slice(0, STEM_MAX).join('').replace(STEM_EDGES, '');
   },
 
   _diskName() {
@@ -122,7 +130,7 @@ const Export = {
               `<span class="summary-fname-name">${stem}<span class="summary-fname-ext">.${ext}</span></span>` +
             `</span>` +
             `<span class="summary-fname-edit" style="display:none;">` +
-              `<input class="summary-fname-input" value="${stem}" spellcheck="false" data-fmt="${eFmt}" data-ext="${ext}">` +
+              `<input class="summary-fname-input" value="${stem}" maxlength="${STEM_MAX}" spellcheck="false" data-fmt="${eFmt}" data-ext="${ext}">` +
               `<span class="summary-fname-ext-static">.${ext}</span>` +
             `</span>` +
           `</span>`;

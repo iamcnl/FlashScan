@@ -177,21 +177,18 @@ def exported_names(path):
 
 # ── File names ───────────────────────────────────────────────────
 
-@pytest.mark.parametrize("raw, expected", [
-    ("report", "report"),
-    ("a/b\\c", "abc"),
-    ("../../etc/passwd", "etcpasswd"),
-    ('na:me*?"<>|', "name"),
-    ("  spaced  ", "spaced"),
-    (".hidden.", "hidden"),
-    ("a\x00b\x1fc", "abc"),
-    ("x" * 300, "x" * 150),
-    ("...", "fallback"),
-    (" . ", "fallback"),
-    ("", "fallback"),
-])
-def test_safe_stem_cannot_escape_the_output_folder(raw, expected):
-    assert api._safe_stem(raw, "fallback") == expected
+STEM_CASES = json.loads((Path(__file__).parent / "stem_cases.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("case", STEM_CASES, ids=[repr(c["raw"])[:40] for c in STEM_CASES])
+def test_safe_stem_gives_a_name_windows_can_save(case):
+    assert api._safe_stem(case["raw"], "") == case["expected"]
+    assert api._safe_stem(case["expected"], "") == case["expected"]
+
+
+def test_safe_stem_uses_the_fallback_only_when_nothing_is_left():
+    assert api._safe_stem("...", "fallback") == "fallback"
+    assert api._safe_stem("CON", "fallback") == "_CON"
 
 
 def test_reserve_unique_numbers_taken_names_and_never_overwrites(tmp_path):

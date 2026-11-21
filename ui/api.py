@@ -46,6 +46,9 @@ MAX_LOGGED_UNREADABLE = 20
 MAX_LOGGED_LINKS = 20
 
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+_MAX_STEM = 150
+_STEM_SPACES = re.compile("[ \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+")
+_DEVICE_NAME = re.compile(r"(?:con|prn|aux|nul|(?:com|lpt)[1-9\u00b9\u00b2\u00b3])", re.IGNORECASE | re.ASCII)
 _INVALID_PATH_CHARS = re.compile(r'[*?<>|"\x00-\x1f]')
 _DEVICE_PREFIXES = ("\\\\?\\", "\\\\.\\")
 _BARE_DRIVE = re.compile(r"[A-Za-z]:")
@@ -174,8 +177,11 @@ def _reserve_unique(path: Path) -> Path:
 
 
 def _safe_stem(stem: str, fallback: str) -> str:
-    cleaned = _INVALID_NAME_CHARS.sub("", str(stem)).strip().strip(".")
-    return cleaned[:150] or fallback
+    """Must stay identical to Export._sanitizeStem in export.js (tests/stem_cases.json checks both)."""
+    text = _STEM_SPACES.sub(" ", _INVALID_NAME_CHARS.sub("", str(stem))).strip(" .")
+    if _DEVICE_NAME.fullmatch(text.split(".", 1)[0].rstrip(" ")):
+        text = "_" + text
+    return text[:_MAX_STEM].strip(" .") or fallback
 
 
 def _norm(path: str) -> str:
