@@ -19,7 +19,7 @@
   <div class="titlebar">
     <span class="appname">flashscan</span>
     <div class="titlebar-actions">
-    <button class="btn-theme-toggle" id="btn-open-log" title="Show log file" aria-label="Show log file">
+    <button class="btn-theme-toggle" id="btn-open-log" title="Show log file in Explorer" aria-label="Show log file in Explorer">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
         <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>
@@ -176,6 +176,7 @@
             <button class="btn btn-secondary" id="btn-ext-all" style="padding:3px 10px;font-size:10px;border-radius:20px;">all</button>
             <button class="btn btn-secondary" id="btn-ext-none" style="padding:3px 10px;font-size:10px;border-radius:20px;">none</button>
           </div>
+          <div class="ext-note" id="ext-note" role="status" aria-live="polite"></div>
 
         </div>
 
@@ -185,11 +186,11 @@
 
         <div class="sb-actions">
           <div class="section-label" style="margin-bottom:6px;">selection</div>
-          <button class="btn-ghost" id="btn-select-all">
+          <button class="btn-ghost" id="btn-select-all" title="Select all (Ctrl+A)" aria-keyshortcuts="Control+A">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             select all
           </button>
-          <button class="btn-ghost" id="btn-deselect-all">
+          <button class="btn-ghost" id="btn-deselect-all" title="Deselect all (Ctrl+D)" aria-keyshortcuts="Control+D">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
             deselect all
           </button>
@@ -197,11 +198,11 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             set all to names only
           </button>
-          <button class="btn-ghost" id="btn-collapse">
+          <button class="btn-ghost" id="btn-collapse" title="Collapse all (Ctrl+W)" aria-keyshortcuts="Control+W">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             collapse all
           </button>
-          <button class="btn-ghost" id="btn-expand">
+          <button class="btn-ghost" id="btn-expand" title="Expand all (Ctrl+E)" aria-keyshortcuts="Control+E">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>
             expand all
           </button>
@@ -222,8 +223,8 @@
                 <circle cx="11" cy="11" r="8"/>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg></span>
-              <input type="text" id="search-input" placeholder="search files…">
-              <button class="search-clear" id="btn-search-clear" title="Clear search" style="display:none;">×</button>
+              <input type="text" id="search-input" placeholder="search files… (Ctrl+F)" aria-keyshortcuts="Control+F">
+              <button class="search-clear" id="btn-search-clear" title="Clear search (Esc)" style="display:none;">×</button>
               <span class="count" id="search-count">0</span>
             </div>
             <button class="btn-adv-filter" id="btn-adv-filter" title="Advanced filter">

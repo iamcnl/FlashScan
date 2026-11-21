@@ -127,6 +127,9 @@ html {
 }
 .sb-block .section-label { margin-bottom: var(--sp-2); }
 
+.ext-note { font-size: 11px; line-height: 1.4; color: var(--text3); }
+.ext-note:not(:empty) { margin-top: var(--sp-2); }
+
 .sb-ext-wrap {
   flex: 1;
   overflow-y: auto;

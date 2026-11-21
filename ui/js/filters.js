@@ -25,6 +25,7 @@ const Filters = {
   _extState:    {},
   _customExts:  [],   // custom extensions added by user
   _extCounts:   null, // Map ext -> files in the current scan; null before a scan
+  _noExtCount:  0,    // files in the current scan without any extension
   _searchTimer: null,
   _filterTimer: null,
 
@@ -204,15 +205,37 @@ const Filters = {
 
   updateCounts() {
     const counts = new Map();
+    let withoutExt = 0;
     for (const item of State.treeData) {
       if (item.type !== 'file') continue;
       const dot = item.name.lastIndexOf('.');
-      if (dot < 0) continue;
+      if (dot < 0) { withoutExt++; continue; }
       const ext = item.name.slice(dot + 1).toLowerCase();
       counts.set(ext, (counts.get(ext) || 0) + 1);
     }
     this._extCounts = counts;
+    this._noExtCount = withoutExt;
     this._renderCounts();
+  },
+
+  // Files the checkboxes cannot touch: no extension, or one that is not in the list
+  _unaffectedCount() {
+    if (!this._extCounts) return 0;
+    let total = this._noExtCount;
+    for (const [ext, count] of this._extCounts) {
+      if (!Object.hasOwn(this._extState, ext)) total += count;
+    }
+    return total;
+  },
+
+  _syncExtNote() {
+    const note = document.getElementById('ext-note');
+    if (!note) return;
+    const n = State.hiddenExts ? this._unaffectedCount() : 0;
+    note.textContent = n
+      ? `${n.toLocaleString()} ${n === 1 ? 'file has' : 'files have'} no extension or one not listed here, `
+        + `so these checkboxes don\u2019t affect ${n === 1 ? 'it' : 'them'}.`
+      : '';
   },
 
   // A file counts toward every group that lists its extension, as the filter does
@@ -225,6 +248,7 @@ const Filters = {
       grp.querySelector('.grp-count').textContent = total === null ? '' : String(total);
       grp.classList.toggle('grp-empty', total === 0);
     });
+    this._syncExtNote();
   },
 
   _extsOf(groupName) {
@@ -282,6 +306,7 @@ const Filters = {
     State.hiddenExts = allOn ? null : new Set(
       Object.entries(this._extState).filter(([, v]) => !v).map(([k]) => k)
     );
+    this._syncExtNote();
   },
 
   // ── Custom extensions ─────────────────────────────────────────────
@@ -382,6 +407,7 @@ const Filters = {
     document.querySelectorAll('[data-ecb]').forEach(el => { el.checked = true; });
     document.querySelectorAll('[data-gcb]').forEach(el => { el.checked = true; el.indeterminate = false; });
     State.hiddenExts = null;
+    this._syncExtNote();
     Tree.invalidate(); Tree.render();
   },
 
@@ -390,6 +416,7 @@ const Filters = {
     document.querySelectorAll('[data-ecb]').forEach(el => { el.checked = false; });
     document.querySelectorAll('[data-gcb]').forEach(el => { el.checked = false; el.indeterminate = false; });
     State.hiddenExts = new Set(Object.keys(this._extState));
+    this._syncExtNote();
     Tree.invalidate(); Tree.render();
   },
 };
