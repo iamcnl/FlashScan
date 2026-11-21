@@ -49,6 +49,9 @@ _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _INVALID_PATH_CHARS = re.compile(r'[*?<>|"\x00-\x1f]')
 _DEVICE_PREFIXES = ("\\\\?\\", "\\\\.\\")
 _BARE_DRIVE = re.compile(r"[A-Za-z]:")
+_DEPTH_DIGITS = re.compile(r"[0-9]{1,6}")
+_BACKEND_SETTINGS = frozenset({"customExts", "windowBounds", "windowMaximized"})
+_PAGE_SETTINGS = frozenset(settings.DEFAULTS) - _BACKEND_SETTINGS
 _UNCHECKABLE = frozenset({ERROR_FILENAME_EXCED_RANGE, ERROR_INVALID_NAME, ERROR_BAD_PATHNAME})
 _DENIED = {"error": "Path is outside the scanned folders."}
 _UNKNOWN_LINK = {"error": "Unknown link."}
@@ -70,6 +73,17 @@ def _folder_state(path) -> str:
 def _path_error(exc: Exception, action: str) -> str:
     """ValueError means the text cannot be encoded for the OS (a lone surrogate on some systems)."""
     return INVALID_PATH if isinstance(exc, ValueError) else describe_error(exc, action)
+
+
+def _parse_depth(value) -> int | None:
+    """A whole number from 1 to 50, or None. Rejects bools, fractions, exponents and text."""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    elif isinstance(value, str) and _DEPTH_DIGITS.fullmatch(value.strip()):
+        value = int(value)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 1 <= value <= 50 else None
 
 
 def _clean_path(raw, empty: str) -> tuple[str, str | None]:
@@ -227,7 +241,14 @@ class API:
         return settings.load()
 
     def save_settings(self, data: dict) -> None:
-        settings.save(data)
+        if not isinstance(data, dict):
+            return
+        known = {key: value for key, value in data.items() if key in _PAGE_SETTINGS}
+        ignored = [key for key in data if key not in _PAGE_SETTINGS]
+        if ignored:
+            log.warning("Ignored settings the page may not write: %s", ", ".join(repr(k)[:40] for k in ignored[:10]))
+        if known:
+            settings.save(known)
 
     def get_custom_exts(self) -> list:
         return settings.load().get("customExts", [])
@@ -404,13 +425,14 @@ class API:
         """
         import scanner  # lazy
 
+        params = params if isinstance(params, dict) else {}
         path, path_problem = _clean_path(params.get("path"), "Enter a path.")
-        depth       = int(params.get("depth", 10))
+        depth       = _parse_depth(params.get("depth", 10))
         incl_hidden = bool(params.get("incl_hidden", False))
         incl_system = bool(params.get("incl_system", False))
 
         errors = []
-        if not (1 <= depth <= 50):
+        if depth is None:
             errors.append("Invalid scan depth (allowed: 1–50).")
         if path_problem:
             errors.append(path_problem)
@@ -549,6 +571,7 @@ class API:
                                folder_states: {path: state} (folders that are not "full"),
                                folder_notes, hidden_exts: [ext] | null } }
         """
+        params = params if isinstance(params, dict) else {}
         output_dir, problem = _clean_path(params.get("output_dir"), "Enter an output folder.")
         if problem:
             return self._refuse_export(problem, output_dir, "output_dir")

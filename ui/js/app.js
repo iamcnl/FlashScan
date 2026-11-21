@@ -945,8 +945,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   initCheckbox('cb-hidden', 'inclHidden');
   initCheckbox('cb-system', 'inclSystem');
   document.getElementById('depth-input')?.addEventListener('change', e => {
-    const depth = parseInt(e.target.value, 10);
-    if (depth >= 1 && depth <= 50) window.pywebview?.api?.save_settings({ lastDepth: depth });
+    const depth = parseDepth(e.target.value);
+    if (depth !== null) window.pywebview?.api?.save_settings({ lastDepth: depth });
   });
 
   // Format grid
@@ -1057,20 +1057,25 @@ function abortScan(msg, fields) {
 }
 
 /* ── Scanning ── */
+function parseDepth(raw) {
+  const text = String(raw ?? '').trim();
+  const depth = /^[0-9]{1,3}$/.test(text) ? Number(text) : NaN;
+  return depth >= 1 && depth <= 50 ? depth : null;
+}
+
 function startScan() {
   if (Scan.running) return;
 
   const pathField = document.getElementById('path-input');
   const path  = cleanPath(pathField?.value);
   if (pathField) pathField.value = path;
-  const depthRaw = document.getElementById('depth-input')?.value?.trim();
-  const depth = parseInt(depthRaw);
+  const depth = parseDepth(document.getElementById('depth-input')?.value);
 
   const errs = [];
   const fields = [];
   if (!path) { errs.push('Enter a path.'); fields.push('path-input'); }
-  if (!depthRaw || isNaN(depth) || depth < 1 || depth > 50) {
-    errs.push('Depth must be a number between 1 and 50.');
+  if (depth === null) {
+    errs.push('Depth must be a whole number between 1 and 50.');
     fields.push('depth-input');
   }
   if (errs.length) { showScanError(errs, fields); return; }

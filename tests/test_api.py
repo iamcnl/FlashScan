@@ -453,8 +453,8 @@ def test_open_log_folder_reports_a_missing_log(app, monkeypatch):
 
 # ── Scanning ─────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("depth", [0, 51, -1])
-def test_scan_rejects_depth_outside_the_allowed_range(app, window, drive, depth):
+@pytest.mark.parametrize("depth", [0, 51, -1, "abc", "", "1e1", "5.5", "-3", "10abc", 5.5, 1e1 + 0.5, None, True, [], {}, "9" * 5000])
+def test_scan_rejects_a_depth_that_is_not_a_whole_number_from_1_to_50(app, window, drive, depth):
     reply = app.scan(scan_params(drive, depth=depth))
 
     assert reply == {"errors": ["Invalid scan depth (allowed: 1–50)."]}
@@ -1435,6 +1435,65 @@ def test_browse_supports_older_pywebview(app, window, monkeypatch):
 
     assert app.browse_directory() == "x"
     assert window.dialog_args == ["legacy"]
+
+
+@pytest.mark.parametrize("value, expected", [
+    (1, 1), (50, 50), (10.0, 10), ("12", 12), (" 7 ", 7), ("007", 7),
+    (0, None), (51, None), (5.5, None), (float("nan"), None), (float("inf"), None),
+    ("1e1", None), ("5.5", None), ("abc", None), ("", None), (None, None),
+    (True, None), (False, None), ([], None), ("٣", None),
+])
+def test_parse_depth(value, expected):
+    assert api._parse_depth(value) == expected
+
+
+@pytest.mark.parametrize("depth", ["12", 12.0])
+def test_scan_accepts_a_depth_given_as_a_digit_string_or_integral_float(app, window, drive, depth):
+    assert app.scan(scan_params(drive, depth=depth)) == {"async": True}
+    window.take_json("onScanDone")
+
+
+def test_scan_without_a_depth_uses_the_default(app, window, drive):
+    assert app.scan({"path": str(drive)}) == {"async": True}
+    assert window.take_json("onScanDone")["depth"] == 10
+
+
+@pytest.mark.parametrize("params", [None, "path", [], 5])
+def test_scan_and_export_treat_a_request_that_is_not_an_object_as_empty(app, params):
+    assert app.scan(params) == {"errors": ["Enter a path."]}
+    assert app.export(params) == {"success": False, "error": "Enter an output folder.", "field": "output_dir"}
+
+
+def test_save_settings_ignores_keys_the_page_may_not_write(app, caplog):
+    app.save_settings({
+        "theme": "dark", "surprise": 1, "windowBounds": {"x": 1}, "windowMaximized": False, "customExts": ["x"],
+    })
+
+    saved = app.get_settings()
+    assert saved["theme"] == "dark"
+    assert "surprise" not in saved
+    assert saved["windowBounds"] is None
+    assert saved["windowMaximized"] is True
+    assert saved["customExts"] == []
+    assert "surprise" in caplog.text
+
+
+def test_save_settings_accepts_every_setting_the_page_sends(app):
+    sent = {
+        "theme": "dark", "sortCol": "size", "sortDir": "desc", "lastOutput": "/o", "lastFormats": ["PDF"],
+        "lastDepth": 7, "lastPath": "/p", "inclHidden": True, "inclSystem": True, "dateFormat": "iso",
+        "exportDateFormat": "iso", "exportIncludeSize": False, "exportIncludeDate": False, "exportMdToggles": False,
+    }
+    app.save_settings(sent)
+
+    assert {key: app.get_settings()[key] for key in sent} == sent
+
+
+@pytest.mark.parametrize("data", [None, "theme", [], 5])
+def test_save_settings_ignores_anything_that_is_not_an_object(app, data):
+    app.save_settings(data)
+
+    assert app.get_settings()["theme"] == "light"
 
 
 def test_settings_round_trip_through_the_api(app):
