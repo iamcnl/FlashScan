@@ -827,10 +827,13 @@
   white-space: nowrap;
 }
 
-.ctx-item:hover {
+.ctx-item:hover,
+.ctx-item:focus-visible {
   background: var(--card2);
   color: var(--text);
 }
+
+.ctx-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .ctx-item:active {
   background: var(--card3);

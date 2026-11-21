@@ -165,3 +165,15 @@ test("copy path and copy name do not depend on the file still existing", async (
     assert.equal(app.document.getElementById("ctx-toast").textContent, "Copied to clipboard");
   });
 });
+test("the saved files are real buttons with names that say which file they act on", async () => {
+  await withApp(async (app) => {
+    const ui = await showResult(app, {});
+
+    for (const el of [ui.link(), ui.open(), ui.reveal()]) {
+      assert.equal(el.tagName, "BUTTON");
+      assert.equal(el.type, "button");
+    }
+    assert.equal(ui.open().getAttribute("aria-label"), "Open report.md");
+    assert.equal(ui.reveal(1).getAttribute("aria-label"), "Show page.html in Explorer");
+  });
+});

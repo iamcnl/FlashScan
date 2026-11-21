@@ -249,3 +249,160 @@ test("set size and position follow the visible rows after filtering", async () =
     assert.equal(b.getAttribute("aria-setsize"), "1");
   });
 });
+
+const menuEl = (app) => app.document.querySelector(".ctx-menu");
+const menuOpen = (app) => menuEl(app)?.style.display === "block";
+const menuItems = (app) => [...menuEl(app).querySelectorAll(".ctx-item")];
+const itemFor = (app, action) => menuEl(app).querySelector(`[data-action="${action}"]`);
+const contextKey = (app, host, button = 0) =>
+  host.dispatchEvent(new app.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true, button }));
+const menuKey = (app, key) =>
+  app.document.activeElement.dispatchEvent(new app.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+
+test("the context menu opens from the keyboard for the focused row and takes focus", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    goTo(app, host, "docs");
+
+    contextKey(app, host);
+
+    assert.equal(menuOpen(app), true);
+    assert.equal(menuEl(app).getAttribute("aria-label"), "docs");
+    assert.equal(app.document.activeElement, menuItems(app)[0]);
+  });
+});
+
+test("a right-click on empty space does not open the menu for the focused row", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    goTo(app, host, "docs");
+
+    contextKey(app, host, 2);
+
+    assert.equal(menuOpen(app), false);
+  });
+});
+
+test("the menu keys wrap around, jump to the ends and Escape returns focus to the tree", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    goTo(app, host, "docs");
+    contextKey(app, host);
+    const items = menuItems(app);
+
+    menuKey(app, "ArrowUp");
+    assert.equal(app.document.activeElement, items.at(-1));
+    menuKey(app, "ArrowDown");
+    assert.equal(app.document.activeElement, items[0]);
+    menuKey(app, "End");
+    assert.equal(app.document.activeElement, items.at(-1));
+    menuKey(app, "Home");
+    assert.equal(app.document.activeElement, items[0]);
+
+    menuKey(app, "Escape");
+    assert.equal(menuOpen(app), false);
+    assert.equal(app.document.activeElement, host);
+  });
+});
+
+test("Tab closes the menu and gives focus back to the tree", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    goTo(app, host, "docs");
+    contextKey(app, host);
+
+    menuKey(app, "Tab");
+
+    assert.equal(menuOpen(app), false);
+    assert.equal(app.document.activeElement, host);
+  });
+});
+
+test("choosing a menu item closes the menu, acts on the row and returns focus", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    goTo(app, host, "docs");
+    contextKey(app, host);
+
+    itemFor(app, "state-name").click();
+
+    assert.equal(menuOpen(app), false);
+    assert.equal(app.document.activeElement, host);
+    assert.equal(app.evaluate("return State.folderStates['/drive/docs'];"), "name");
+  });
+});
+
+test("the folder state items say which one is current", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    goTo(app, host, "docs");
+    contextKey(app, host);
+
+    const states = ["state-full", "state-name", "state-skip"].map((a) => [a, itemFor(app, a).getAttribute("aria-checked")]);
+
+    assert.deepEqual(states, [["state-full", "true"], ["state-name", "false"], ["state-skip", "false"]]);
+    assert.equal(itemFor(app, "state-full").getAttribute("role"), "menuitemradio");
+  });
+});
+
+test("only folders below the drive offer a note", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    const offered = (name) => {
+      goTo(app, host, name);
+      contextKey(app, host);
+      const has = itemFor(app, "note");
+      menuKey(app, "Escape");
+      return has?.textContent.trim() ?? null;
+    };
+
+    assert.equal(offered("drive"), null);
+    assert.equal(offered("docs"), "Add note…");
+    assert.equal(offered("top.txt"), null);
+  });
+});
+
+test("a folder that already has a note offers to edit it", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    app.evaluate("State.folderNotes['/drive/docs'] = 'keep';");
+    goTo(app, host, "docs");
+
+    contextKey(app, host);
+
+    assert.equal(itemFor(app, "note").textContent.trim(), "Edit note…");
+  });
+});
+
+test("the note item opens the editor, and saving returns focus to the tree", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    goTo(app, host, "docs");
+    contextKey(app, host);
+
+    itemFor(app, "note").click();
+    const input = app.document.getElementById("note-input");
+
+    assert.equal(app.document.activeElement, input);
+    input.value = "  check later ";
+    input.dispatchEvent(new app.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+
+    assert.equal(app.document.getElementById("note-editor-overlay"), null);
+    assert.equal(app.evaluate("return State.folderNotes['/drive/docs'];"), "check later");
+    assert.equal(app.document.activeElement, host);
+  });
+});
+
+test("Escape in the note editor closes it and returns focus to the tree", async () => {
+  await withApp(async (app) => {
+    const host = setup(app);
+    goTo(app, host, "docs");
+    contextKey(app, host);
+    itemFor(app, "note").click();
+
+    app.document.activeElement.dispatchEvent(new app.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+
+    assert.equal(app.document.getElementById("note-editor-overlay"), null);
+    assert.equal(app.document.activeElement, host);
+  });
+});

@@ -522,18 +522,23 @@ const Tree = {
     inp.focus();
     inp.select();
 
+    const close = () => {
+      wrap.remove();
+      this._container.focus({ preventScroll: true });
+    };
+
     const commit = (val) => {
       if (val.trim()) State.folderNotes[path] = val.trim();
       else            delete State.folderNotes[path];
       Persist.schedule();
-      wrap.remove();
+      close();
       this.invalidate();
       this.render();
     };
 
     inp.addEventListener('keydown', ev => {
       if (ev.key === 'Enter')  { ev.preventDefault(); commit(inp.value); }
-      if (ev.key === 'Escape') { wrap.remove(); }
+      if (ev.key === 'Escape') { close(); }
     });
     document.getElementById('note-save').addEventListener('click',  () => commit(inp.value));
     document.getElementById('note-clear').addEventListener('click', () => commit(''));
@@ -715,13 +720,35 @@ const Tree = {
   /* ── Context menu ──────────────────────────────────────── */
   _onContextMenu(e) {
     const row = e.target.closest('[data-type]');
-    if (!row) return;
+    if (row) {
+      e.preventDefault();
+      this._openMenu(row.dataset.path, row.dataset.type, e.clientX, e.clientY, false);
+      return;
+    }
+    // Shift+F10 and the Menu key fire this event on the tree itself, not on a row
+    const focused = e.button !== 2 ? this._flatRows[this._focusIdx] : null;
+    if (!focused) return;
     e.preventDefault();
-    const path = row.dataset.path;
-    const type = row.dataset.type;
+    const rect = (this._rowElement(focused.item.path, true) || this._container).getBoundingClientRect();
+    this._openMenu(focused.item.path, focused.type, rect.left + 24, rect.bottom, true);
+  },
+
+  _openMenu(path, type, x, y, keyboard) {
     const item = State.treeData.find(i => i.path === path);
-    if (!item) return;
-    ContextMenu.show(e.clientX, e.clientY, path, type, item, this);
+    if (item) ContextMenu.show(x, y, path, type, item, this, { keyboard });
+  },
+
+  _rowElement(path, scrollTo = false) {
+    if (scrollTo) {
+      const idx = this._flatRows.findIndex(r => r.item.path === path);
+      if (idx >= 0) { this._scrollToIdx(idx); this.invalidate(); this.render(); }
+    }
+    return [...this._rowsEl.children].find(el => el.dataset.path === path) || null;
+  },
+
+  editNote(path) {
+    const row = this._rowElement(path, true);
+    if (row) this._openNoteEditor(path, row.querySelector('.note-btn') || row);
   },
 
   /* ── Folder actions ────────────────────────────────────── */

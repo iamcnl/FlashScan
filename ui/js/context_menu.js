@@ -10,6 +10,7 @@ const ContextMenu = (() => {
   let _curPath  = null;
   let _curItem  = null;   // { name, path, size, mtime, ... }
   let _curTree  = null;   // reference to the Tree object
+  let _opener   = null;   // element that had focus when the menu opened
 
   /* ── Icons ─────────────────────────────────────────────────── */
   const ICONS = {
@@ -23,6 +24,7 @@ const ContextMenu = (() => {
     stateFull: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 11 12 14 22 4"/></svg>`,
     stateName: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
     stateSkip: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
+    note:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
     check:     `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
   };
 
@@ -32,15 +34,41 @@ const ContextMenu = (() => {
     _el = document.createElement('div');
     _el.className = 'ctx-menu';
     _el.setAttribute('role', 'menu');
+    _el.tabIndex = -1;
+    _el.addEventListener('keydown', _onKeyDown);
     document.body.appendChild(_el);
   }
 
+  function _items() {
+    return [..._el.querySelectorAll('.ctx-item')];
+  }
+
+  function _onKeyDown(e) {
+    const items = _items();
+    const at = items.indexOf(document.activeElement);
+    const go = i => {
+      e.preventDefault();
+      items[(i + items.length) % items.length]?.focus();
+    };
+    switch (e.key) {
+      case 'ArrowDown': return go(at + 1);
+      case 'ArrowUp':   return go(at < 0 ? -1 : at - 1);
+      case 'Home':      return go(0);
+      case 'End':       return go(items.length - 1);
+      case 'Escape':    e.preventDefault(); hide(true); return;
+      case 'Tab':       hide(true); return;
+    }
+  }
+
   /* ── Render menu ─────────────────────────────────────────── */
-  function show(x, y, path, type, itemData, treeRef) {
+  function show(x, y, path, type, itemData, treeRef, { keyboard = false } = {}) {
     _ensureEl();
     _curPath = path;
     _curItem = itemData;
     _curTree = treeRef;
+    const active = document.activeElement;
+    _opener  = active && active !== document.body && !_el.contains(active) ? active : null;
+    _el.setAttribute('aria-label', itemData.name);
 
     const isFolder   = type === 'folder';
     const curState   = isFolder ? (State.folderStates[path] || 'full') : null;
@@ -63,6 +91,10 @@ const ContextMenu = (() => {
     if (isFolder) {
       html += `<div class="ctx-divider"></div>`;
       html += `<div class="ctx-section">`;
+      if (itemData.lvl > 0) {
+        html += _row('note', ICONS.note, State.folderNotes[path] ? 'Edit note…' : 'Add note…');
+        html += `<div class="ctx-divider-inner"></div>`;
+      }
       html += _row('sel-all',    ICONS.selAll,    'Select all in folder');
       html += _row('desel-all',  ICONS.deselAll,  'Deselect all in folder');
       html += `<div class="ctx-divider-inner"></div>`;
@@ -85,22 +117,26 @@ const ContextMenu = (() => {
     _el.style.left       = Math.min(x, vw - mw - 8) + 'px';
     _el.style.top        = Math.min(y, vh - mh - 8) + 'px';
     _el.style.visibility = '';
+    (keyboard ? _items()[0] : _el)?.focus({ preventScroll: true });
   }
 
-  function hide() {
-    if (_el) _el.style.display = 'none';
+  function hide(restoreFocus = false) {
+    if (!_el || _el.style.display !== 'block') return;
+    const hadFocus = _el.contains(document.activeElement);
+    _el.style.display = 'none';
+    if ((restoreFocus || hadFocus) && _opener?.isConnected) _opener.focus({ preventScroll: true });
   }
 
   /* ── HTML helpers ────────────────────────────────────────── */
   function _row(action, icon, label) {
-    return `<button class="ctx-item" data-action="${action}" role="menuitem">
+    return `<button class="ctx-item" data-action="${action}" role="menuitem" tabindex="-1">
       <span class="ctx-icon">${icon}</span>
       <span class="ctx-label">${label}</span>
     </button>`;
   }
 
   function _rowCheck(action, icon, label, checked) {
-    return `<button class="ctx-item ctx-item-check" data-action="${action}" role="menuitem">
+    return `<button class="ctx-item ctx-item-check" data-action="${action}" role="menuitemradio" aria-checked="${checked}" tabindex="-1">
       <span class="ctx-icon">${icon}</span>
       <span class="ctx-label">${label}</span>
       ${checked ? `<span class="ctx-checkmark">${ICONS.check}</span>` : ''}
@@ -117,7 +153,7 @@ const ContextMenu = (() => {
     if (!btn) return;
     e.stopPropagation();
     const action = btn.dataset.action;
-    hide();
+    hide(true);
     _dispatch(action);
   }
 
@@ -147,6 +183,10 @@ const ContextMenu = (() => {
         } else {
           _showMetaToast(_curItem);
         }
+        break;
+
+      case 'note':
+        _curTree?.editNote(_curPath);
         break;
 
       case 'sel-all':

@@ -538,6 +538,10 @@ html {
   margin-bottom: 2px;
 }
 .export-file-link {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
   color: var(--accent-text);
   cursor: pointer;
   font-family: var(--font-mono);
